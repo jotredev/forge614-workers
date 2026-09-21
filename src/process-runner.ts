@@ -73,21 +73,23 @@ export async function runProcess(options: RunProcessOptions): Promise<RunProcess
       return { ok: false, reason: "spawn_error", message: (err as Error).message };
     }
 
-    try {
-      // write()/end() can fail synchronously OR return a pending Promise
-      // that later rejects (e.g. EPIPE once the child has closed/never read
-      // stdin). Awaiting them here lets this same try/catch observe both
-      // forms of failure instead of leaving an unhandled rejection behind.
-      const writeResult = proc.stdin.write(options.stdin);
-      if (writeResult instanceof Promise) await writeResult;
-      const endResult = proc.stdin.end();
-      if (endResult instanceof Promise) await endResult;
-    } catch {
-      // The child may close or never read stdin (e.g. it exits immediately
-      // without consuming input). That's a normal, valid condition — it
-      // doesn't mean the process itself failed, so we ignore the write/end
-      // error here and continue on to await its exit and capture output.
-    }
+    // Write stdin and end it as a fire-and-forget background operation. We
+    // deliberately do NOT await this before arming the timeout timers or
+    // starting stdout/stderr capture below: if the child is slow to read
+    // stdin (e.g. it writes substantial stdout first, and the OS pipe
+    // buffer fills before it gets around to reading), awaiting here would
+    // block indefinitely with the timers not yet armed — defeating
+    // timeoutMs for that entire, plausible class of child behavior. We
+    // still attach a synchronous .catch() so a write/end failure (e.g.
+    // EPIPE from a child that closes or never reads stdin — also a normal,
+    // valid condition) never surfaces as an unhandled rejection; it doesn't
+    // mean the process itself failed, only that the stdin pipe write did.
+    void Promise.resolve()
+      .then(() => proc.stdin.write(options.stdin))
+      .then(() => proc.stdin.end())
+      .catch(() => {
+        // Ignore: see comment above.
+      });
 
     const start = Date.now();
     const stdoutPromise = captureStream(proc.stdout, options.maxOutputBytes);

@@ -57,4 +57,32 @@ describe("runProcess", () => {
       expect(result.exitCode).toBe(0);
     }
   });
+
+  test("timeoutMs still engages when the child never reads a large stdin payload", async () => {
+    // never-reads-stdin.js sleeps for 60s without ever reading stdin. With a
+    // large enough payload, Bun's FileSink#write() returns a Promise that
+    // stays pending for as long as the child is alive and not reading (OS
+    // pipe backpressure) — confirmed by direct experimentation against this
+    // runtime. If runProcess awaited that write before arming its timeout
+    // timers, timeoutMs would never get a chance to fire and this call
+    // would hang for the full 60s. Asserting it resolves quickly, with a
+    // timeout result, proves the write is backgrounded instead of blocking
+    // timer setup.
+    const startedAt = Date.now();
+    const result = await runProcess({
+      command: process.execPath,
+      args: [fixturePath("never-reads-stdin.js")],
+      stdin: "x".repeat(5_000_000),
+      timeoutMs: 300,
+      sigkillGraceMs: 200,
+      maxOutputBytes: 1024,
+    });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(elapsedMs).toBeLessThan(5_000);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("timeout");
+    }
+  }, 10_000);
 });
