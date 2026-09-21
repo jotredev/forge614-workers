@@ -140,4 +140,34 @@ describe("runBatch", () => {
     const failedEvent = events.find((e) => e.event === "task_failed");
     expect(failedEvent).toMatchObject({ reason: "engine_unsupported" });
   });
+
+  test("marks a task as spawn_error and continues with the next task", async () => {
+    const events: TaskEvent[] = [];
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: true,
+        command: { command: "/does/not/exist", args: [], stdin: true },
+      }),
+      runProcess: async (): Promise<RunProcessResult> => ({
+        ok: false,
+        reason: "spawn_error",
+        message: "ENOENT",
+      }),
+    };
+
+    const result = await runBatch(
+      {
+        enginesBin: "/bin/engines",
+        maxOutputBytes: 1024,
+        tasks: [makeTask({ id: "t1" }), makeTask({ id: "t2" })],
+      },
+      (e) => events.push(e),
+      deps
+    );
+
+    expect(result.pausedByQuota).toBe(false);
+    expect(events.filter((e) => e.event === "task_failed")).toHaveLength(2);
+    const runCompleted = events.find((e) => e.event === "run_completed");
+    expect(runCompleted).toMatchObject({ totalTasks: 2, failed: 2, completed: 0, notStarted: 0 });
+  });
 });
