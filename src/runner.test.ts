@@ -170,4 +170,38 @@ describe("runBatch", () => {
     const runCompleted = events.find((e) => e.event === "run_completed");
     expect(runCompleted).toMatchObject({ totalTasks: 2, failed: 2, completed: 0, notStarted: 0 });
   });
+
+  test("stops the batch immediately on quota_exhausted and leaves later tasks not started", async () => {
+    const events: TaskEvent[] = [];
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: true,
+        command: { command: "/bin/claude", args: [], stdin: true },
+      }),
+      runProcess: async (): Promise<RunProcessResult> => ({
+        ok: true,
+        exitCode: 1,
+        durationMs: 5,
+        stdout: { text: "", bytes: 0, truncated: false },
+        stderr: { text: "Claude AI usage limit reached", bytes: 30, truncated: false },
+      }),
+    };
+
+    const result = await runBatch(
+      {
+        enginesBin: "/bin/engines",
+        maxOutputBytes: 1024,
+        tasks: [makeTask({ id: "t1" }), makeTask({ id: "t2" })],
+      },
+      (e) => events.push(e),
+      deps
+    );
+
+    expect(result.pausedByQuota).toBe(true);
+    expect(events.map((e) => e.event)).toEqual(["task_started", "quota_exhausted", "run_completed"]);
+    const runCompleted = events[2];
+    if (runCompleted.event === "run_completed") {
+      expect(runCompleted).toMatchObject({ notStarted: 1, pausedByQuota: true, completed: 0, failed: 0 });
+    }
+  });
 });
