@@ -115,7 +115,7 @@ describe("runBatch", () => {
     expect(failedEvent).toMatchObject({ reason: "generic_error", exitCode: 1 });
   });
 
-  test("marks a task as engine_unsupported when Engines rejects it and never calls runProcess", async () => {
+  test("marks a task as engine_unsupported when Engines rejects it with HEADLESS_UNSUPPORTED/REASONING_LEVEL_UNSUPPORTED and never calls runProcess", async () => {
     const events: TaskEvent[] = [];
     let runProcessCalled = false;
     const deps = {
@@ -139,6 +139,35 @@ describe("runBatch", () => {
     expect(runProcessCalled).toBe(false);
     const failedEvent = events.find((e) => e.event === "task_failed");
     expect(failedEvent).toMatchObject({ reason: "engine_unsupported" });
+    if (failedEvent?.event === "task_failed") {
+      expect(failedEvent.stderr).toContain("REASONING_LEVEL_UNSUPPORTED");
+    }
+  });
+
+  test("marks a task as generic_error (not engine_unsupported) when Engines rejects it with a non-unsupported code, preserving the code in stderr", async () => {
+    const events: TaskEvent[] = [];
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: false,
+        code: "ENGINES_RESPONSE_INVALID",
+        message: "Failed to parse forge614-engines headless output as JSON",
+      }),
+      runProcess: async (): Promise<RunProcessResult> => {
+        throw new Error("should not be called");
+      },
+    };
+
+    await runBatch(
+      { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask()] },
+      (e) => events.push(e),
+      deps
+    );
+
+    const failedEvent = events.find((e) => e.event === "task_failed");
+    expect(failedEvent).toMatchObject({ reason: "generic_error" });
+    if (failedEvent?.event === "task_failed") {
+      expect(failedEvent.stderr).toContain("ENGINES_RESPONSE_INVALID");
+    }
   });
 
   test("marks a task as spawn_error and continues with the next task", async () => {
@@ -167,6 +196,109 @@ describe("runBatch", () => {
 
     expect(result.pausedByQuota).toBe(false);
     expect(events.filter((e) => e.event === "task_failed")).toHaveLength(2);
+    const runCompleted = events.find((e) => e.event === "run_completed");
+    expect(runCompleted).toMatchObject({ totalTasks: 2, failed: 2, completed: 0, notStarted: 0 });
+  });
+
+  test("does not treat a zero-exit task as quota_exhausted even if its output contains a quota pattern", async () => {
+    // Reproduces the reviewer's end-to-end scenario: a fake agent exits 0
+    // (success) while printing text that happens to contain a real quota
+    // pattern (e.g. discussing rate limiting as part of a code review).
+    // Quota detection must only run for a non-zero exit code.
+    const events: TaskEvent[] = [];
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: true,
+        command: { command: "/bin/claude", args: [], stdin: true },
+      }),
+      runProcess: async (): Promise<RunProcessResult> => ({
+        ok: true,
+        exitCode: 0,
+        durationMs: 5,
+        stdout: {
+          text: "Reviewing the code... note the API's rate limiting middleware. Claude AI usage limit reached in a comment example.",
+          bytes: 200,
+          truncated: false,
+        },
+        stderr: { text: "", bytes: 0, truncated: false },
+      }),
+    };
+
+    const result = await runBatch(
+      { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask()] },
+      (e) => events.push(e),
+      deps
+    );
+
+    expect(result.pausedByQuota).toBe(false);
+    expect(events.map((e) => e.event)).toEqual(["task_started", "task_completed", "run_completed"]);
+  });
+
+  test("marks a task as failed and continues the batch when runProcess throws synchronously", async () => {
+    const events: TaskEvent[] = [];
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: true,
+        command: { command: "/bin/claude", args: [], stdin: true },
+      }),
+      runProcess: async (): Promise<RunProcessResult> => {
+        throw new Error("boom: unexpected runProcess failure");
+      },
+    };
+
+    const result = await runBatch(
+      {
+        enginesBin: "/bin/engines",
+        maxOutputBytes: 1024,
+        tasks: [makeTask({ id: "t1" }), makeTask({ id: "t2" })],
+      },
+      (e) => events.push(e),
+      deps
+    );
+
+    expect(result.pausedByQuota).toBe(false);
+    const failedEvents = events.filter((e) => e.event === "task_failed");
+    expect(failedEvents).toHaveLength(2);
+    for (const failedEvent of failedEvents) {
+      expect(failedEvent).toMatchObject({ reason: "generic_error" });
+      if (failedEvent.event === "task_failed") {
+        expect(failedEvent.stderr).toContain("boom: unexpected runProcess failure");
+      }
+    }
+    const runCompleted = events.find((e) => e.event === "run_completed");
+    expect(runCompleted).toMatchObject({ totalTasks: 2, failed: 2, completed: 0, notStarted: 0 });
+  });
+
+  test("marks a task as failed and continues the batch when resolveHeadlessCommand throws synchronously", async () => {
+    const events: TaskEvent[] = [];
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => {
+        throw new Error("boom: unexpected resolveHeadlessCommand failure");
+      },
+      runProcess: async (): Promise<RunProcessResult> => {
+        throw new Error("should not be called");
+      },
+    };
+
+    const result = await runBatch(
+      {
+        enginesBin: "/bin/engines",
+        maxOutputBytes: 1024,
+        tasks: [makeTask({ id: "t1" }), makeTask({ id: "t2" })],
+      },
+      (e) => events.push(e),
+      deps
+    );
+
+    expect(result.pausedByQuota).toBe(false);
+    const failedEvents = events.filter((e) => e.event === "task_failed");
+    expect(failedEvents).toHaveLength(2);
+    for (const failedEvent of failedEvents) {
+      expect(failedEvent).toMatchObject({ reason: "generic_error" });
+      if (failedEvent.event === "task_failed") {
+        expect(failedEvent.stderr).toContain("boom: unexpected resolveHeadlessCommand failure");
+      }
+    }
     const runCompleted = events.find((e) => e.event === "run_completed");
     expect(runCompleted).toMatchObject({ totalTasks: 2, failed: 2, completed: 0, notStarted: 0 });
   });

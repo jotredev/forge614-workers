@@ -38,10 +38,27 @@ export async function runCli(
   }
 
   const onEvent = (event: TaskEvent) => writeLine(JSON.stringify(event));
-  const result = await runBatch(
-    { enginesBin: input.enginesBin, maxOutputBytes: input.maxOutputBytes, tasks: input.tasks },
-    onEvent
-  );
 
-  return { exitCode: result.pausedByQuota ? 75 : 0 };
+  // runBatch now has its own per-task error boundary, so this should only
+  // ever fire if something is fundamentally broken (e.g. a throw from
+  // runBatch's own bookkeeping, outside the per-task try/catch). Even then,
+  // the caller must get SOME terminal signal rather than an unhandled
+  // exception.
+  try {
+    const result = await runBatch(
+      { enginesBin: input.enginesBin, maxOutputBytes: input.maxOutputBytes, tasks: input.tasks },
+      onEvent
+    );
+
+    return { exitCode: result.pausedByQuota ? 75 : 0 };
+  } catch (err) {
+    writeLine(
+      JSON.stringify({
+        event: "fatal_error",
+        reason: "unexpected_error",
+        message: (err as Error).message ?? String(err),
+      })
+    );
+    return { exitCode: 1 };
+  }
 }

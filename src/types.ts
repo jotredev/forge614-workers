@@ -69,7 +69,11 @@ export type TaskEvent =
       pausedByQuota: boolean;
       totalDurationMs: number;
     }
-  | { event: "fatal_error"; reason: "invalid_input" | "engines_bin_not_found"; message: string };
+  | {
+      event: "fatal_error";
+      reason: "invalid_input" | "engines_bin_not_found" | "unexpected_error";
+      message: string;
+    };
 
 export const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_TASK_TIMEOUT_MS = 10 * 60 * 1000;
