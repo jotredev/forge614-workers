@@ -22,11 +22,19 @@ export type ResolveHeadlessResult =
 export async function resolveHeadlessCommand(
   options: ResolveHeadlessOptions
 ): Promise<ResolveHeadlessResult> {
+  // The prompt is deliberately NOT passed as a `--prompt` CLI arg: Workers
+  // always requests `--stdin-prompt`, and forge614-engines fully ignores
+  // `--prompt`'s value when `--stdin-prompt` is also passed (verified live:
+  // output is byte-identical with or without it). Passing it anyway would
+  // (a) risk E2BIG from Bun.spawn for prompts near/over the OS ARG_MAX
+  // (as low as ~128KiB on Linux), crashing the whole batch, and (b) leave
+  // the prompt visible in forge614-engines's own argv (e.g. `ps` output)
+  // for the duration of this invocation, defeating the point of
+  // `--stdin-prompt` in the first place.
   const args = [
     "headless",
     "--agent", options.agentId,
     "--executable", options.executable,
-    "--prompt", options.prompt,
     "--stdin-prompt",
   ];
   if (options.model) args.push("--model", options.model);
