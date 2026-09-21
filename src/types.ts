@@ -123,10 +123,16 @@ function parseTask(raw: unknown, index: number): TaskSpec {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new InvalidInputError(`tasks[${index}].timeoutMs must be a positive number`);
   }
-  const reasoningLevel =
-    t.reasoningLevel === undefined || t.reasoningLevel === null
-      ? null
-      : (t.reasoningLevel as ReasoningLevel);
+
+  let reasoningLevel: ReasoningLevel | null = null;
+  if (t.reasoningLevel !== undefined && t.reasoningLevel !== null) {
+    if (!["low", "medium", "high"].includes(t.reasoningLevel as string)) {
+      throw new InvalidInputError(
+        `tasks[${index}].reasoningLevel must be one of "low", "medium", "high"`
+      );
+    }
+    reasoningLevel = t.reasoningLevel as ReasoningLevel;
+  }
 
   return {
     id: t.id as string,

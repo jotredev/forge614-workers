@@ -85,4 +85,23 @@ describe("parseRunInput", () => {
       )
     ).toThrow(InvalidInputError);
   });
+
+  test("throws InvalidInputError when reasoningLevel is an invalid value", () => {
+    expect(() =>
+      parseRunInput(
+        JSON.stringify({
+          enginesBin: "/bin/forge614-engines",
+          tasks: [
+            {
+              id: "t1",
+              agentId: "claude-code",
+              executable: "/bin/claude",
+              prompt: "hi",
+              reasoningLevel: "invalid",
+            },
+          ],
+        })
+      )
+    ).toThrow(InvalidInputError);
+  });
 });
