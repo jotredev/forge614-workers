@@ -73,8 +73,21 @@ export async function runProcess(options: RunProcessOptions): Promise<RunProcess
       return { ok: false, reason: "spawn_error", message: (err as Error).message };
     }
 
-    proc.stdin.write(options.stdin);
-    proc.stdin.end();
+    try {
+      // write()/end() can fail synchronously OR return a pending Promise
+      // that later rejects (e.g. EPIPE once the child has closed/never read
+      // stdin). Awaiting them here lets this same try/catch observe both
+      // forms of failure instead of leaving an unhandled rejection behind.
+      const writeResult = proc.stdin.write(options.stdin);
+      if (writeResult instanceof Promise) await writeResult;
+      const endResult = proc.stdin.end();
+      if (endResult instanceof Promise) await endResult;
+    } catch {
+      // The child may close or never read stdin (e.g. it exits immediately
+      // without consuming input). That's a normal, valid condition — it
+      // doesn't mean the process itself failed, so we ignore the write/end
+      // error here and continue on to await its exit and capture output.
+    }
 
     const start = Date.now();
     const stdoutPromise = captureStream(proc.stdout, options.maxOutputBytes);
