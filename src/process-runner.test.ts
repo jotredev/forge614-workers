@@ -107,4 +107,21 @@ describe("runProcess", () => {
       expect(env.CODEX_HOME).toBe(capturedTempDir);
     }
   });
+
+  test("truncates stdout at maxOutputBytes and reports the true observed size", async () => {
+    const result = await runProcess({
+      command: process.execPath,
+      args: [fixturePath("big-output.js"), "1000"],
+      stdin: "",
+      timeoutMs: 5000,
+      maxOutputBytes: 100,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.stdout.text.length).toBe(100);
+      expect(result.stdout.bytes).toBe(1000);
+      expect(result.stdout.truncated).toBe(true);
+    }
+  });
 });
