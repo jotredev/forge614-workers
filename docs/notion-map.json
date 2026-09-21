@@ -1,0 +1,27 @@
+{
+  "project": "forge614-workers",
+  "repository": "jotredev/forge614-workers",
+  "reviewedProductVersion": "0.1.0",
+  "notionHub": "https://app.notion.com/p/3e221943d12981a8b72af5059665ad3b?pvs=204",
+  "category": "AI Engineer / Librerías",
+  "entries": [
+    {"localPath":"docs/00-forge614-workers.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d129817fa4bbca7f444cd0f3?pvs=204","fingerprint":"sha256:96fee54a542b9a465f5b984df888c2a6fbe943d35094530158aba43ab58c8e88"},
+    {"localPath":"docs/00-forge614-workers.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d129817db592e9e9bcfe286e?pvs=204","fingerprint":"sha256:9132ec5799bb003e2fe7f6907bb06e6a47fd61b1beca74c99382a47170732cc8"},
+    {"localPath":"docs/01-role-and-ecosystem.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d12981aa8076c0bdddceff96?pvs=204","fingerprint":"sha256:d98f9332efea8889b8d174f81fa7852911fee55d7e541942b548262f74124f0f"},
+    {"localPath":"docs/01-role-and-ecosystem.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d12981e9bb45c77eb9ab244c?pvs=204","fingerprint":"sha256:c3663fc30e2754fe3d3603a2bc73e4c9d219e3ff74bac33400b3792ae551ef3d"},
+    {"localPath":"docs/02-architecture-and-code-map.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d12981c7aa20ea02ffd802c5?pvs=204","fingerprint":"sha256:15976fee1742b5b5c50ac88ebeceaf07337eeacb58920e0b2e72c95aaa5e7eda"},
+    {"localPath":"docs/02-architecture-and-code-map.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d12981e296b5e99e40046ebd?pvs=204","fingerprint":"sha256:f9939fecd8739e147160e803e57977a50791c8b6015885ebf87872fa1caa12c6"},
+    {"localPath":"docs/03-data-contract.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d1298117b3c2d44f32e64fc7?pvs=204","fingerprint":"sha256:16a391a7911ba6068600c688d0e59e4885c6d8cfd380aae670c3881fc6ab650c"},
+    {"localPath":"docs/03-data-contract.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d129817bbbdffdb92301888d?pvs=204","fingerprint":"sha256:4e66e6cb9135cd388012c47eccdfa6153049d7dc9d924d9a858562029b5cd61e"},
+    {"localPath":"docs/04-isolation-and-process-lifecycle.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d12981a99b58dd322b37bfe2?pvs=204","fingerprint":"sha256:c8ee6dc106933ef95660c540ba5fdc2940715cf6b33dd801663be893c57fbfc0"},
+    {"localPath":"docs/04-isolation-and-process-lifecycle.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d1298133b2fbdb0ec6cef139?pvs=204","fingerprint":"sha256:3488689784bf6d8189535cf99b1a530d441bbe5d5af0615ea27461f96a7bf802"},
+    {"localPath":"docs/05-errors-and-quotas.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d12981fc8679d865b1dce761?pvs=204","fingerprint":"sha256:c364b35ddf6de7f9a90fb6a4584ba8d622cc3bb112b8cd1f7c8ea726102d5255"},
+    {"localPath":"docs/05-errors-and-quotas.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d12981d992b5c6dff1a95045?pvs=204","fingerprint":"sha256:75679ef11c839a36214b7d19bb49346f5225deab73bea94e08fbd5491a231841"},
+    {"localPath":"docs/06-testing-and-operations.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d12981fc8e81ed21564a84b8?pvs=204","fingerprint":"sha256:3f789fb5d5585b6da44523eca1330c151d6869c03155cde6a8d5d8d1181882dd"},
+    {"localPath":"docs/06-testing-and-operations.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d12981a4acd8fac4b333dea1?pvs=204","fingerprint":"sha256:ec5abecf7f674a973431a9fa26eea65f533eeea5ba83025fb24669d24ab1411c"},
+    {"localPath":"docs/07-adding-engine-adapter.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d129814f84c3e6314622c0ca?pvs=204","fingerprint":"sha256:d19e71631b1ab222be6b441088a6f57b07b9a598d469163a2eb4adba6bb6c0a6"},
+    {"localPath":"docs/07-adding-engine-adapter.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d12981aea4c9dda69fdc5f5a?pvs=204","fingerprint":"sha256:8756e5ac91a8c29404f478c9f21d95ddd0afaa8673ec8c808c2d2d21b265c592"},
+    {"localPath":"docs/08-source-index.md","language":"es","notionUrl":"https://app.notion.com/p/3e221943d1298193b69ec2edddc3895e?pvs=204","fingerprint":"sha256:e2163d2f7ca24caca13d9be2de50515645a35c14fdb1d2b63b47cf68405b229e"},
+    {"localPath":"docs/08-source-index.en.md","language":"en","notionUrl":"https://app.notion.com/p/3e221943d1298118a250e3a9aa571f32?pvs=204","fingerprint":"sha256:f125e4a4d64eeebb25c6bcec7fead4a6fdcd378eb4ff52a23d4497274890ffc0"}
+  ]
+}
