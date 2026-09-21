@@ -168,16 +168,21 @@ Per task:
 | `generic_error` | Non-zero exit code with no quota pattern matched; **or** Engines rejected the task with any error code other than the two `engine_unsupported` ones (the code travels in the event's `stderr` field for diagnostics); **or** an unexpected exception anywhere in that task's handling (a defensive catch-all — this reason should be rare in practice) | No — continue to the next task |
 
 Batch-level fatal errors (nothing ran): malformed input JSON, or `enginesBin`
-missing/not executable. These emit a single `fatal_error` event and skip
-`run_completed` entirely. As a last-resort defensive backstop, an exception
-escaping `runBatch` itself (which should not happen given the per-task
-catch-all above) is also surfaced as a `fatal_error` rather than an unhandled
-crash.
+missing/not executable. These emit a single `fatal_error` event with reason
+`invalid_input` or `engines_bin_not_found`, and skip `run_completed` entirely.
+As a last-resort defensive backstop, an exception escaping `runBatch` itself
+(which should not happen given the per-task catch-all above) is also
+surfaced as a `fatal_error`, with reason `unexpected_error`, rather than an
+unhandled crash — this one differs from the other two in that some tasks
+may already have run before it fired.
 
 Exit codes of the `forge614-workers` process:
 - `0` — batch ran to completion (individual task failures don't change this).
 - `75` — batch stopped early due to `quota_exhausted`.
-- `2` — fatal error, no task ran.
+- `2` — fatal error (`invalid_input` or `engines_bin_not_found`), no task ran.
+- `1` — fatal error (`unexpected_error`): `runBatch` itself threw after some
+  tasks may already have run. Distinct from `2` precisely because it can
+  follow partial progress, which `2` never does.
 
 ## 7. Testing strategy
 
