@@ -42,11 +42,14 @@ TypeScript on Bun, following the same convention as `forge614-engines`:
   knows how to interpret failures from its own engine's CLI, and how to isolate its
   process environment.
 - **`engines-client`** — invokes
-  `forge614-engines headless --agent <id> --executable <ruta> --prompt <texto> [--model <m>] [--reasoning-level <n>]`
-  as a subprocess to resolve `{command, args}`, and translates Engines' known
-  error codes (`HEADLESS_UNSUPPORTED`, `REASONING_LEVEL_UNSUPPORTED`) into the
-  `engine_unsupported` task-failure reason. If `enginesBin` does not exist or is not
-  executable, this is a fatal batch-level error (see section 6).
+  `forge614-engines headless --agent <id> --executable <ruta> --prompt <texto> --stdin-prompt [--model <m>] [--reasoning-level <n>]`
+  as a subprocess to resolve `{command, args, stdin?}`, and translates Engines'
+  known error codes (`HEADLESS_UNSUPPORTED`, `REASONING_LEVEL_UNSUPPORTED`) into
+  the `engine_unsupported` task-failure reason. Workers always requests
+  `--stdin-prompt` (available on `forge614-engines` ≥ 1.7.0, supported today by
+  every headless-capable agent without exception) so the prompt never appears in
+  `args`, and therefore never appears in `ps` output. If `enginesBin` does not
+  exist or is not executable, this is a fatal batch-level error (see section 6).
 - **`process-runner`** — actually `spawn()`s the resolved command: creates an
   isolated temp directory per task, builds a restricted `env`, writes the prompt to
   the child's stdin, enforces the per-task timeout, captures stdout/stderr up to
@@ -123,7 +126,12 @@ Per task:
    the adapter's `isolationEnv(tempDir)` on top (which may override `HOME` again or
    add engine-specific variables).
 3. Deliver the prompt exclusively via the child's **stdin** — never as a CLI
-   argument, so it never appears in process listings.
+   argument, so it never appears in process listings. This is safe to do
+   unconditionally: Workers always requests `--stdin-prompt` from Engines, and
+   Engines' own contract guarantees a resolved command either honors it
+   (`stdin: true`, prompt absent from `args`) or fails outright with a thrown
+   error that Workers already surfaces as `engine_unsupported` — never a silent
+   fallback to embedding the prompt in `args`.
 4. Enforce `timeoutMs`: on expiry, send `SIGTERM`, wait a short grace period (5s),
    then `SIGKILL` if still alive. Results in `task_failed` with `reason: "timeout"`.
 5. Capture stdout/stderr up to `maxOutputBytes` per stream.
