@@ -58,4 +58,21 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("REASONING_LEVEL_UNSUPPORTED");
   });
+
+  test("reports ENGINES_RESPONSE_INVALID instead of throwing when the binary prints non-JSON stdout", async () => {
+    const fakeBin = new URL(
+      "../test/fixtures/fake-engines-invalid-json.sh",
+      import.meta.url
+    ).pathname;
+
+    const result = await resolveHeadlessCommand({
+      enginesBin: fakeBin,
+      agentId: "claude-code",
+      executable: "/bin/claude",
+      prompt: "hello",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe("ENGINES_RESPONSE_INVALID");
+  });
 });

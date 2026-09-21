@@ -32,13 +32,33 @@ export async function resolveHeadlessCommand(
   if (options.model) args.push("--model", options.model);
   if (options.reasoningLevel) args.push("--reasoning-level", options.reasoningLevel);
 
-  const proc = Bun.spawn([options.enginesBin, ...args], { stdout: "pipe", stderr: "pipe" });
+  // stderr is ignored (not piped) so a chatty child process can never fill the
+  // OS pipe buffer and deadlock while we're only awaiting stdout/exited.
+  const proc = Bun.spawn([options.enginesBin, ...args], { stdout: "pipe", stderr: "ignore" });
   const stdout = await new Response(proc.stdout).text();
   await proc.exited;
 
-  const parsed = JSON.parse(stdout) as
-    | { headless: HeadlessCommand }
-    | { error: { code: string; message: string } };
+  let parsed: { headless: HeadlessCommand } | { error: { code: string; message: string } };
+  try {
+    const candidate = JSON.parse(stdout) as unknown;
+    if (
+      typeof candidate !== "object" ||
+      candidate === null ||
+      (!("headless" in candidate) && !("error" in candidate))
+    ) {
+      throw new Error('response JSON did not contain a "headless" or "error" field');
+    }
+    parsed = candidate as { headless: HeadlessCommand } | { error: { code: string; message: string } };
+  } catch (err) {
+    const snippet = stdout.slice(0, 200);
+    return {
+      ok: false,
+      code: "ENGINES_RESPONSE_INVALID",
+      message:
+        `Failed to parse forge614-engines headless output as JSON: ${(err as Error).message}. ` +
+        `Raw stdout (truncated): ${JSON.stringify(snippet)}`,
+    };
+  }
 
   if ("error" in parsed) {
     return { ok: false, code: parsed.error.code, message: parsed.error.message };
