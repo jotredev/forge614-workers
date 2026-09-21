@@ -85,4 +85,26 @@ describe("runProcess", () => {
       expect(result.reason).toBe("timeout");
     }
   }, 10_000);
+
+  test("sets HOME to the isolated temp dir and applies buildExtraEnv on top", async () => {
+    let capturedTempDir = "";
+    const result = await runProcess({
+      command: process.execPath,
+      args: [fixturePath("print-env.js")],
+      stdin: "",
+      timeoutMs: 5000,
+      maxOutputBytes: 1024 * 1024,
+      buildExtraEnv: (tempDir) => {
+        capturedTempDir = tempDir;
+        return { CODEX_HOME: tempDir };
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const env = JSON.parse(result.stdout.text);
+      expect(env.HOME).toBe(capturedTempDir);
+      expect(env.CODEX_HOME).toBe(capturedTempDir);
+    }
+  });
 });
