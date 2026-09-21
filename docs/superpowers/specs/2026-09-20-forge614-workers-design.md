@@ -42,14 +42,21 @@ TypeScript on Bun, following the same convention as `forge614-engines`:
   knows how to interpret failures from its own engine's CLI, and how to isolate its
   process environment.
 - **`engines-client`** — invokes
-  `forge614-engines headless --agent <id> --executable <ruta> --prompt <texto> --stdin-prompt [--model <m>] [--reasoning-level <n>]`
+  `forge614-engines headless --agent <id> --executable <ruta> --stdin-prompt [--model <m>] [--reasoning-level <n>]`
   as a subprocess to resolve `{command, args, stdin?}`, and translates Engines'
   known error codes (`HEADLESS_UNSUPPORTED`, `REASONING_LEVEL_UNSUPPORTED`) into
-  the `engine_unsupported` task-failure reason. Workers always requests
-  `--stdin-prompt` (available on `forge614-engines` ≥ 1.7.0, supported today by
-  every headless-capable agent without exception) so the prompt never appears in
-  `args`, and therefore never appears in `ps` output. If `enginesBin` does not
-  exist or is not executable, this is a fatal batch-level error (see section 6).
+  the `engine_unsupported` task-failure reason (any other error code is a
+  `generic_error` instead). Workers always requests `--stdin-prompt` (available
+  on `forge614-engines` ≥ 1.7.0, supported today by every headless-capable agent
+  without exception) and deliberately never passes `--prompt` at all — the
+  prompt is delivered to `forge614-engines` itself only implicitly through this
+  flag's contract, so it never appears in `args` for that invocation either, and
+  therefore never appears in `ps` output at any point in the pipeline. Passing
+  `--prompt` alongside `--stdin-prompt` was tried and rejected: Engines ignores
+  its value in that mode, but very large prompts (beyond the OS's `ARG_MAX`,
+  as low as ~128 KiB on Linux) would still crash the `Bun.spawn` call with
+  `E2BIG` for no benefit. If `enginesBin` does not exist or is not executable,
+  this is a fatal batch-level error (see section 6).
 - **`process-runner`** — actually `spawn()`s the resolved command: creates an
   isolated temp directory per task, builds a restricted `env`, writes the prompt to
   the child's stdin, enforces the per-task timeout, captures stdout/stderr up to
@@ -121,17 +128,29 @@ the caller knows how much was cut.
 
 Per task:
 1. Create an exclusive, empty temp directory (`mkdtemp`) used as the child's `cwd`.
-2. Build a restricted `env`: inherit `PATH` and the minimum needed from the parent
-   process, set `HOME` to the temp directory as a universal baseline, then apply
-   the adapter's `isolationEnv(tempDir)` on top (which may override `HOME` again or
-   add engine-specific variables).
+2. Build `env`: inherit the **full** parent environment (the spawned AI CLI needs
+   broad access — API keys, proxy settings, and whatever else its own auth and
+   networking require to function at all; an allowlist would be brittle and buy
+   no concrete isolation benefit), then set `HOME` to the temp directory as a
+   universal baseline, then apply the adapter's `isolationEnv(tempDir)` on top
+   (which may override `HOME` again or add engine-specific variables). The
+   isolation boundary this design cares about is config/session-state
+   contamination between tasks (`HOME`/`CODEX_HOME`/etc.), not environment
+   variable secrecy from the child — the child is the thing that needs those
+   secrets to authenticate.
 3. Deliver the prompt exclusively via the child's **stdin** — never as a CLI
-   argument, so it never appears in process listings. This is safe to do
-   unconditionally: Workers always requests `--stdin-prompt` from Engines, and
-   Engines' own contract guarantees a resolved command either honors it
-   (`stdin: true`, prompt absent from `args`) or fails outright with a thrown
-   error that Workers already surfaces as `engine_unsupported` — never a silent
-   fallback to embedding the prompt in `args`.
+   argument, so it never appears in process listings. This applies both to the
+   AI engine's own process AND to the `forge614-engines headless` invocation
+   used to resolve it: Workers never passes `--prompt` on that call either,
+   relying solely on `--stdin-prompt`, so the prompt never touches any
+   process's argv at any point in the pipeline. Engines' own contract
+   guarantees a resolved command either honors `--stdin-prompt` (`stdin: true`,
+   prompt absent from `args`) or fails outright with a thrown error — Workers
+   surfaces that as `engine_unsupported` only for the two codes that mean
+   "this combination isn't supported" (`HEADLESS_UNSUPPORTED`,
+   `REASONING_LEVEL_UNSUPPORTED`); any other Engines error code is a
+   `generic_error` instead, never a silent fallback to embedding the prompt in
+   `args`.
 4. Enforce `timeoutMs`: on expiry, send `SIGTERM`, wait a short grace period (5s),
    then `SIGKILL` if still alive. Results in `task_failed` with `reason: "timeout"`.
 5. Capture stdout/stderr up to `maxOutputBytes` per stream.
@@ -142,15 +161,18 @@ Per task:
 
 | `reason` | When | Pauses the batch? |
 |---|---|---|
-| `quota_exhausted` | The adapter detects its quota/session-exhausted pattern in stderr or the stdout prefix | **Yes** — Workers stops immediately, emits `quota_exhausted` then `run_completed`, no further tasks run |
+| `quota_exhausted` | The process exited **non-zero** AND the adapter detects its quota/session-exhausted pattern in stderr or the stdout prefix. A zero exit is never treated as quota-exhausted, no matter what its output contains — an agent's output can legitimately discuss rate limits without the run having failed. | **Yes** — Workers stops immediately, emits `quota_exhausted` then `run_completed`, no further tasks run |
 | `timeout` | `timeoutMs` elapsed without the process exiting | No — continue to the next task |
 | `engine_unsupported` | Engines returned `HEADLESS_UNSUPPORTED` or `REASONING_LEVEL_UNSUPPORTED` while resolving the command | No — continue to the next task |
 | `spawn_error` | The OS failed to launch the resolved command (ENOENT, permission denied, etc.) | No — continue to the next task |
-| `generic_error` | Non-zero exit code, process ran, no quota pattern matched | No — continue to the next task |
+| `generic_error` | Non-zero exit code with no quota pattern matched; **or** Engines rejected the task with any error code other than the two `engine_unsupported` ones (the code travels in the event's `stderr` field for diagnostics); **or** an unexpected exception anywhere in that task's handling (a defensive catch-all — this reason should be rare in practice) | No — continue to the next task |
 
 Batch-level fatal errors (nothing ran): malformed input JSON, or `enginesBin`
 missing/not executable. These emit a single `fatal_error` event and skip
-`run_completed` entirely.
+`run_completed` entirely. As a last-resort defensive backstop, an exception
+escaping `runBatch` itself (which should not happen given the per-task
+catch-all above) is also surfaced as a `fatal_error` rather than an unhandled
+crash.
 
 Exit codes of the `forge614-workers` process:
 - `0` — batch ran to completion (individual task failures don't change this).
