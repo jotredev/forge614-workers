@@ -21,21 +21,20 @@ describe("runProcess", () => {
   });
 
   test("cleans up the isolated temp working directory after the process exits", async () => {
-    let usedTempDir = "";
-    await runProcess({
+    const result = await runProcess({
       command: process.execPath,
-      args: [fixturePath("echo-stdin.js")],
-      stdin: "x",
+      args: [fixturePath("print-cwd.js")],
+      stdin: "",
       timeoutMs: 5000,
       maxOutputBytes: 1024,
-      buildExtraEnv: (tempDir) => {
-        usedTempDir = tempDir;
-        return {};
-      },
     });
 
-    expect(usedTempDir).not.toBe("");
-    expect(existsSync(usedTempDir)).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const usedTempDir = result.stdout.text;
+      expect(usedTempDir).not.toBe("");
+      expect(existsSync(usedTempDir)).toBe(false);
+    }
   });
 
   test("resolves normally when the child exits without reading stdin", async () => {
@@ -86,25 +85,19 @@ describe("runProcess", () => {
     }
   }, 10_000);
 
-  test("sets HOME to the isolated temp dir and applies buildExtraEnv on top", async () => {
-    let capturedTempDir = "";
+  test("inherits the parent process's environment untouched (no HOME override)", async () => {
     const result = await runProcess({
       command: process.execPath,
       args: [fixturePath("print-env.js")],
       stdin: "",
       timeoutMs: 5000,
       maxOutputBytes: 1024 * 1024,
-      buildExtraEnv: (tempDir) => {
-        capturedTempDir = tempDir;
-        return { CODEX_HOME: tempDir };
-      },
     });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       const env = JSON.parse(result.stdout.text);
-      expect(env.HOME).toBe(capturedTempDir);
-      expect(env.CODEX_HOME).toBe(capturedTempDir);
+      expect(env.HOME).toBe(process.env.HOME);
     }
   });
 

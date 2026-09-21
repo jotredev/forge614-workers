@@ -90,11 +90,10 @@ export async function runBatch(
       const adapter = getAdapter(task.agentId);
       const result = await deps.runProcess({
         command: resolved.command.command,
-        args: resolved.command.args,
+        args: [...resolved.command.args, ...(adapter?.extraArgs() ?? [])],
         stdin: task.prompt,
         timeoutMs: task.timeoutMs,
         maxOutputBytes: options.maxOutputBytes,
-        buildExtraEnv: adapter ? (tempDir) => adapter.isolationEnv(tempDir) : undefined,
       });
 
       if (!result.ok && result.reason === "spawn_error") {

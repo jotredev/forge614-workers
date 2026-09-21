@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import { runBatch } from "./runner";
 import type { TaskSpec, TaskEvent } from "./types";
 import type { ResolveHeadlessResult } from "./engines-client";
-import type { RunProcessResult } from "./process-runner";
+import type { RunProcessOptions, RunProcessResult } from "./process-runner";
 
 function makeTask(overrides: Partial<TaskSpec> = {}): TaskSpec {
   return {
@@ -335,5 +335,37 @@ describe("runBatch", () => {
     if (runCompleted.event === "run_completed") {
       expect(runCompleted).toMatchObject({ notStarted: 1, pausedByQuota: true, completed: 0, failed: 0 });
     }
+  });
+
+  test("appends the real adapter's extraArgs to the resolved command's args", async () => {
+    let capturedArgs: string[] | undefined;
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: true,
+        command: { command: "/bin/codex", args: ["exec"], stdin: true },
+      }),
+      runProcess: async (options: RunProcessOptions): Promise<RunProcessResult> => {
+        capturedArgs = options.args;
+        return {
+          ok: true,
+          exitCode: 0,
+          durationMs: 5,
+          stdout: { text: "ok", bytes: 2, truncated: false },
+          stderr: { text: "", bytes: 0, truncated: false },
+        };
+      },
+    };
+
+    await runBatch(
+      {
+        enginesBin: "/bin/engines",
+        maxOutputBytes: 1024,
+        tasks: [makeTask({ agentId: "codex", executable: "/bin/codex" })],
+      },
+      () => {},
+      deps
+    );
+
+    expect(capturedArgs).toEqual(["exec", "--skip-git-repo-check"]);
   });
 });

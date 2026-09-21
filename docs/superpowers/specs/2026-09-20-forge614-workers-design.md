@@ -39,8 +39,8 @@ TypeScript on Bun, following the same convention as `forge614-engines`:
 - **`adapters/`** — one module per supported `agentId` (`claude-code.ts`,
   `codex.ts`, ...), each implementing the `EngineAdapter` interface below. An
   adapter never builds the OS command (that's `engines-client`'s job) — it only
-  knows how to interpret failures from its own engine's CLI, and how to isolate its
-  process environment.
+  knows how to interpret failures from its own engine's CLI, and what extra CLI
+  flags it needs to run in an isolated, untrusted working directory.
 - **`engines-client`** — invokes
   `forge614-engines headless --agent <id> --executable <ruta> --stdin-prompt [--model <m>] [--reasoning-level <n>]`
   as a subprocess to resolve `{command, args, stdin?}`, and translates Engines'
@@ -58,8 +58,9 @@ TypeScript on Bun, following the same convention as `forge614-engines`:
   `E2BIG` for no benefit. If `enginesBin` does not exist or is not executable,
   this is a fatal batch-level error (see section 6).
 - **`process-runner`** — actually `spawn()`s the resolved command: creates an
-  isolated temp directory per task, builds a restricted `env`, writes the prompt to
-  the child's stdin, enforces the per-task timeout, captures stdout/stderr up to
+  isolated temp directory per task used as the child's `cwd` (the environment is
+  otherwise inherited untouched — see section 5), writes the prompt to the child's
+  stdin, enforces the per-task timeout, captures stdout/stderr up to
   `maxOutputBytes`, and cleans up the temp directory when the task ends.
 
 ### Adapter interface
@@ -76,10 +77,10 @@ interface EngineAdapter {
     stdoutPrefix: string
   ): { matched: boolean; pattern?: string };
 
-  // Environment variables to set/override for this engine's isolated run, beyond
-  // the universal HOME override applied by process-runner (e.g. an engine-specific
-  // config-dir variable). Returns {} when no extra isolation is needed.
-  isolationEnv(tempDir: string): Record<string, string>;
+  // Extra CLI flags this engine needs because Workers always runs it in a
+  // fresh, empty, untrusted working directory (e.g. Codex's
+  // --skip-git-repo-check). Returns [] when no extra flags are needed.
+  extraArgs(): string[];
 }
 ```
 
@@ -128,16 +129,20 @@ the caller knows how much was cut.
 
 Per task:
 1. Create an exclusive, empty temp directory (`mkdtemp`) used as the child's `cwd`.
-2. Build `env`: inherit the **full** parent environment (the spawned AI CLI needs
-   broad access — API keys, proxy settings, and whatever else its own auth and
-   networking require to function at all; an allowlist would be brittle and buy
-   no concrete isolation benefit), then set `HOME` to the temp directory as a
-   universal baseline, then apply the adapter's `isolationEnv(tempDir)` on top
-   (which may override `HOME` again or add engine-specific variables). The
-   isolation boundary this design cares about is config/session-state
-   contamination between tasks (`HOME`/`CODEX_HOME`/etc.), not environment
-   variable secrecy from the child — the child is the thing that needs those
-   secrets to authenticate.
+2. Build `env`: inherit the parent environment **completely untouched** — no
+   override of `HOME`, `CODEX_HOME`, or anything else. This was tried
+   (overriding `HOME`/`CODEX_HOME` to the temp directory) and found, via
+   real testing against authenticated Claude Code and Codex installations,
+   to break subscription-based authentication entirely: both CLIs store
+   their session credentials under those directories (files or OS
+   keychain), so redirecting them wipes out login state. The isolation
+   goal was never about the user's own identity/session config — it's
+   about not leaking a *target project's* own files (its `CLAUDE.md`,
+   `.claude/`, `.mcp.json`) into an unrelated task, which is what the
+   isolated `cwd` (point 1) already achieves on its own. If an engine's
+   CLI needs extra flags to run in a working directory it doesn't already
+   trust as a result (as Codex does), that's the adapter's `extraArgs()`
+   job, not an environment concern.
 3. Deliver the prompt exclusively via the child's **stdin** — never as a CLI
    argument, so it never appears in process listings. This applies both to the
    AI engine's own process AND to the `forge614-engines headless` invocation
@@ -187,12 +192,13 @@ Exit codes of the `forge614-workers` process:
 ## 7. Testing strategy
 
 - **Unit tests** (`bun test`), no real AI CLI required:
-  - `adapters/*.test.ts` — `detectQuotaExhausted` and `isolationEnv` against
+  - `adapters/*.test.ts` — `detectQuotaExhausted` and `extraArgs` against
     captured/anonymized stderr and stdout fixtures (both quota-exhausted and
     generic-error cases, to guard against false positives/negatives).
   - `process-runner.test.ts` — timeout handling (fixture script that ignores
-    `SIGTERM` to exercise `SIGKILL`), `maxOutputBytes` truncation, env/cwd
-    isolation and temp-dir cleanup, and `spawn_error` (nonexistent executable).
+    `SIGTERM` to exercise `SIGKILL`), `maxOutputBytes` truncation, cwd
+    isolation (full environment inheritance verified separately) and
+    temp-dir cleanup, and `spawn_error` (nonexistent executable).
   - `runner.test.ts` — sequential ordering, immediate stop on `quota_exhausted`,
     `run_completed` emitted on every non-fatal path, and the three exit codes.
 - **`engines-client.test.ts` runs against the real, installed `forge614-engines`

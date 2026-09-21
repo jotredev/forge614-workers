@@ -17,8 +17,13 @@ export const codexAdapter: EngineAdapter = {
     }
     return { matched: false };
   },
-  isolationEnv(tempDir) {
-    // Codex CLI reads its config/session directory from $CODEX_HOME.
-    return { CODEX_HOME: tempDir };
+  extraArgs() {
+    // Codex refuses to run in a directory it doesn't recognize as a trusted
+    // git repo. Workers always runs each task in a fresh, isolated,
+    // non-repo temp directory by design, so this flag is required on every
+    // invocation — confirmed empirically: without it, Codex exits with
+    // "Not inside a trusted directory and --skip-git-repo-check was not
+    // specified."
+    return ["--skip-git-repo-check"];
   },
 };

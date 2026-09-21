@@ -14,7 +14,6 @@ export interface RunProcessOptions {
   stdin: string;
   timeoutMs: number;
   maxOutputBytes: number;
-  buildExtraEnv?: (tempDir: string) => Record<string, string>;
   sigkillGraceMs?: number;
 }
 
@@ -57,14 +56,10 @@ async function captureStream(
 export async function runProcess(options: RunProcessOptions): Promise<RunProcessResult> {
   const tempDir = await mkdtemp(join(tmpdir(), "forge614-workers-"));
   try {
-    const extraEnv = options.buildExtraEnv ? options.buildExtraEnv(tempDir) : {};
-    const env = { ...process.env, HOME: tempDir, ...extraEnv };
-
     let proc: Bun.Subprocess<"pipe", "pipe", "pipe">;
     try {
       proc = Bun.spawn([options.command, ...options.args], {
         cwd: tempDir,
-        env,
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",

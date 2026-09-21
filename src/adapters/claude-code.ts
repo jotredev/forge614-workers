@@ -14,9 +14,7 @@ export const claudeCodeAdapter: EngineAdapter = {
     }
     return { matched: false };
   },
-  isolationEnv(_tempDir) {
-    // Claude Code only reads $HOME for its config (~/.claude); the
-    // universal HOME override applied by process-runner is sufficient.
-    return {};
+  extraArgs() {
+    return [];
   },
 };

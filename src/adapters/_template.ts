@@ -13,7 +13,7 @@ export const templateAdapter: EngineAdapter = {
     }
     return { matched: false };
   },
-  isolationEnv(_tempDir) {
-    return {};
+  extraArgs() {
+    return [];
   },
 };

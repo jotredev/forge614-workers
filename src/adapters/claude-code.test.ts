@@ -24,8 +24,8 @@ describe("claudeCodeAdapter.detectQuotaExhausted", () => {
   });
 });
 
-describe("claudeCodeAdapter.isolationEnv", () => {
-  test("needs no extra environment variables beyond the universal HOME override", () => {
-    expect(claudeCodeAdapter.isolationEnv("/tmp/whatever")).toEqual({});
+describe("claudeCodeAdapter.extraArgs", () => {
+  test("needs no extra CLI flags", () => {
+    expect(claudeCodeAdapter.extraArgs()).toEqual([]);
   });
 });

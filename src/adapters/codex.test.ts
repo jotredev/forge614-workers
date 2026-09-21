@@ -18,8 +18,8 @@ describe("codexAdapter.detectQuotaExhausted", () => {
   });
 });
 
-describe("codexAdapter.isolationEnv", () => {
-  test("points CODEX_HOME at the isolated temp dir", () => {
-    expect(codexAdapter.isolationEnv("/tmp/abc123")).toEqual({ CODEX_HOME: "/tmp/abc123" });
+describe("codexAdapter.extraArgs", () => {
+  test("adds --skip-git-repo-check since Workers always runs in an untrusted temp dir", () => {
+    expect(codexAdapter.extraArgs()).toEqual(["--skip-git-repo-check"]);
   });
 });
