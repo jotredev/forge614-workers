@@ -88,4 +88,30 @@ describe("runBatch", () => {
     expect(result.pausedByQuota).toBe(false);
     expect(events.map((e) => e.event)).toEqual(["task_started", "task_completed", "run_completed"]);
   });
+
+  test("marks a task as generic_error when the process exits non-zero without a quota match", async () => {
+    const events: TaskEvent[] = [];
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: true,
+        command: { command: "/bin/claude", args: [], stdin: true },
+      }),
+      runProcess: async (): Promise<RunProcessResult> => ({
+        ok: true,
+        exitCode: 1,
+        durationMs: 5,
+        stdout: { text: "", bytes: 0, truncated: false },
+        stderr: { text: "boom", bytes: 4, truncated: false },
+      }),
+    };
+
+    await runBatch(
+      { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask()] },
+      (e) => events.push(e),
+      deps
+    );
+
+    const failedEvent = events.find((e) => e.event === "task_failed");
+    expect(failedEvent).toMatchObject({ reason: "generic_error", exitCode: 1 });
+  });
 });
