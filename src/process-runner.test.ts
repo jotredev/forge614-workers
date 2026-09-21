@@ -113,6 +113,12 @@ describe("runProcess", () => {
         for (const [key, value] of Object.entries(process.env)) {
           expect(env[key]).toBe(value);
         }
+        // The per-key loop above only proves shared keys match — it would
+        // not catch an additive regression (e.g. reintroducing
+        // `env: { ...process.env, CODEX_HOME: tempDir }`), since an extra
+        // key the child has but the parent doesn't is never iterated over.
+        // Assert the key sets are exactly equal (no extras, no omissions).
+        expect(Object.keys(env).sort()).toEqual(Object.keys(process.env).sort());
       }
     } finally {
       delete process.env[markerKey];
