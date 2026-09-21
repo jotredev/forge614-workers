@@ -2165,9 +2165,11 @@ Expected: produces `dist/forge614-workers`
 
 - [ ] **Step 6: Smoke-test the compiled binary manually**
 
-Run:
+Run (paths must be absolute — `process-runner.ts` spawns each task's
+executable with `cwd` set to an isolated temp directory, so relative paths
+never resolve there):
 ```bash
-echo '{"enginesBin":"test/fixtures/fake-engines-headless.js","tasks":[{"id":"t1","agentId":"claude-code","executable":"test/fixtures/fake-agent-echo.js","prompt":"hi"}]}' | ./dist/forge614-workers; echo "exit: $?"
+echo "{\"enginesBin\":\"$PWD/test/fixtures/fake-engines-headless.js\",\"tasks\":[{\"id\":\"t1\",\"agentId\":\"claude-code\",\"executable\":\"$PWD/test/fixtures/fake-agent-echo.js\",\"prompt\":\"hi\"}]}" | ./dist/forge614-workers; echo "exit: $?"
 ```
 Expected: three NDJSON lines (`task_started`, `task_completed`, `run_completed`) and `exit: 0`.
 
