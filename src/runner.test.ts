@@ -114,4 +114,30 @@ describe("runBatch", () => {
     const failedEvent = events.find((e) => e.event === "task_failed");
     expect(failedEvent).toMatchObject({ reason: "generic_error", exitCode: 1 });
   });
+
+  test("marks a task as engine_unsupported when Engines rejects it and never calls runProcess", async () => {
+    const events: TaskEvent[] = [];
+    let runProcessCalled = false;
+    const deps = {
+      resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+        ok: false,
+        code: "REASONING_LEVEL_UNSUPPORTED",
+        message: "claude-code does not support reasoning levels",
+      }),
+      runProcess: async (): Promise<RunProcessResult> => {
+        runProcessCalled = true;
+        throw new Error("should not be called");
+      },
+    };
+
+    await runBatch(
+      { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask()] },
+      (e) => events.push(e),
+      deps
+    );
+
+    expect(runProcessCalled).toBe(false);
+    const failedEvent = events.find((e) => e.event === "task_failed");
+    expect(failedEvent).toMatchObject({ reason: "engine_unsupported" });
+  });
 });
