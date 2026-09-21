@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { runProcess } from "./process-runner";
 import { fixturePath } from "../test/support/fixture-path";
 
@@ -85,19 +86,36 @@ describe("runProcess", () => {
     }
   }, 10_000);
 
-  test("inherits the parent process's environment untouched (no HOME override)", async () => {
-    const result = await runProcess({
-      command: process.execPath,
-      args: [fixturePath("print-env.js")],
-      stdin: "",
-      timeoutMs: 5000,
-      maxOutputBytes: 1024 * 1024,
-    });
+  test("inherits the parent process's environment completely untouched (no HOME override, no allowlisting)", async () => {
+    // A single `env.HOME === process.env.HOME` assertion is too weak to
+    // prove "untouched": it would still pass for a filtered allowlist like
+    // `{ HOME: process.env.HOME }` (which drops PATH/API keys/everything
+    // else) or for a partial regression that reintroduces a CODEX_HOME
+    // override (which would go unnoticed if CODEX_HOME happens to be unset
+    // either way). Set a unique marker that couldn't already be present,
+    // then diff every key in process.env against what the child observed.
+    const markerKey = "FORGE614_ENV_INHERITANCE_MARKER";
+    const markerValue = randomUUID();
+    process.env[markerKey] = markerValue;
+    try {
+      const result = await runProcess({
+        command: process.execPath,
+        args: [fixturePath("print-env.js")],
+        stdin: "",
+        timeoutMs: 5000,
+        maxOutputBytes: 1024 * 1024,
+      });
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      const env = JSON.parse(result.stdout.text);
-      expect(env.HOME).toBe(process.env.HOME);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const env = JSON.parse(result.stdout.text);
+        expect(env[markerKey]).toBe(markerValue);
+        for (const [key, value] of Object.entries(process.env)) {
+          expect(env[key]).toBe(value);
+        }
+      }
+    } finally {
+      delete process.env[markerKey];
     }
   });
 

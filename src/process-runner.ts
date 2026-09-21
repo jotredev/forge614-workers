@@ -60,6 +60,12 @@ export async function runProcess(options: RunProcessOptions): Promise<RunProcess
     try {
       proc = Bun.spawn([options.command, ...options.args], {
         cwd: tempDir,
+        // Pass process.env explicitly (rather than omitting `env`, which
+        // Bun instead resolves from an internal snapshot taken at Bun's own
+        // startup and does NOT reflect later runtime mutations to
+        // process.env) so the child always inherits the parent's true,
+        // live, completely untouched environment.
+        env: process.env,
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",

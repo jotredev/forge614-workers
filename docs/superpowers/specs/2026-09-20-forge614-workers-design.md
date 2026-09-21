@@ -129,7 +129,7 @@ the caller knows how much was cut.
 
 Per task:
 1. Create an exclusive, empty temp directory (`mkdtemp`) used as the child's `cwd`.
-2. Build `env`: inherit the parent environment **completely untouched** — no
+2. Environment: inherit the parent environment **completely untouched** — no
    override of `HOME`, `CODEX_HOME`, or anything else. This was tried
    (overriding `HOME`/`CODEX_HOME` to the temp directory) and found, via
    real testing against authenticated Claude Code and Codex installations,
@@ -160,7 +160,18 @@ Per task:
    then `SIGKILL` if still alive. Results in `task_failed` with `reason: "timeout"`.
 5. Capture stdout/stderr up to `maxOutputBytes` per stream.
 6. On completion (success, failure, timeout, or quota detected), delete the temp
-   directory before moving to the next task. No state leaks between tasks.
+   directory before moving to the next task. No *working-directory* state leaks
+   between tasks — but user-global config and session state under the real `HOME`
+   (or `CODEX_HOME`, etc.) is intentionally shared and accumulates across tasks
+   and batches, per point 2's rationale; Workers does not clean this up.
+
+Known operational note: because each task's temp `cwd` is throwaway but
+`HOME`/`CODEX_HOME` are real, each task run leaves behind one session/project
+directory under the user's real home (e.g. Claude Code's
+`~/.claude/projects/<mangled-cwd>/...`, Codex's `~/.codex/sessions`) that nothing
+currently cleans up. This is an accepted, unbounded-accumulation-over-many-batches
+trade-off, not something to fix as part of this design — flagged here for future
+operational awareness only.
 
 ## 6. Error handling and pause semantics
 

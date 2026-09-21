@@ -20,18 +20,22 @@ function makeTask(overrides: Partial<TaskSpec> = {}): TaskSpec {
 describe("runBatch", () => {
   test("emits task_started, task_completed, and run_completed for a successful task", async () => {
     const events: TaskEvent[] = [];
+    let capturedArgs: string[] | undefined;
     const deps = {
       resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
         ok: true,
         command: { command: "/bin/claude", args: ["-p"], stdin: true },
       }),
-      runProcess: async (): Promise<RunProcessResult> => ({
-        ok: true,
-        exitCode: 0,
-        durationMs: 10,
-        stdout: { text: "ok", bytes: 2, truncated: false },
-        stderr: { text: "", bytes: 0, truncated: false },
-      }),
+      runProcess: async (options: RunProcessOptions): Promise<RunProcessResult> => {
+        capturedArgs = options.args;
+        return {
+          ok: true,
+          exitCode: 0,
+          durationMs: 10,
+          stdout: { text: "ok", bytes: 2, truncated: false },
+          stderr: { text: "", bytes: 0, truncated: false },
+        };
+      },
     };
 
     const result = await runBatch(
@@ -46,6 +50,10 @@ describe("runBatch", () => {
     if (finalEvent.event === "run_completed") {
       expect(finalEvent).toMatchObject({ totalTasks: 1, completed: 1, failed: 0, notStarted: 0 });
     }
+    // Locks in that claude-code's empty extraArgs() genuinely adds nothing
+    // to the resolved command's args, not just that codex's extraArgs()
+    // adds something (covered separately below).
+    expect(capturedArgs).toEqual(["-p"]);
   });
 
   test("byte-slices the quota-detection stdout prefix instead of char-slicing", async () => {
