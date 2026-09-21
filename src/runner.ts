@@ -113,7 +113,12 @@ export async function runBatch(
 
     if (!result.ok) continue; // exhaustiveness guard; all failure branches handled above
 
-    const stdoutPrefix = result.stdout.text.slice(0, QUOTA_STDOUT_PREFIX_BYTES);
+    // Slice by true UTF-8 bytes, not UTF-16 code units: `String.slice` counts
+    // code units, which diverges from the spec's "exactly N bytes" contract
+    // once stdout contains multi-byte characters before the cutoff point.
+    const stdoutPrefix = Buffer.from(result.stdout.text, "utf8")
+      .subarray(0, QUOTA_STDOUT_PREFIX_BYTES)
+      .toString("utf8");
     const quota = adapter?.detectQuotaExhausted(result.stderr.text, stdoutPrefix) ?? { matched: false };
 
     if (quota.matched) {
