@@ -138,4 +138,17 @@ describe("runProcess", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("timeout");
   });
+
+  test("reports spawn_error when the resolved executable does not exist", async () => {
+    const result = await runProcess({
+      command: "/definitely/does/not/exist/binary",
+      args: [],
+      stdin: "",
+      timeoutMs: 1000,
+      maxOutputBytes: 1024,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("spawn_error");
+  });
 });
