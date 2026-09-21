@@ -1,9 +1,16 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, beforeAll } from "bun:test";
 import { resolveHeadlessCommand } from "./engines-client";
 import { resolveEnginesBinForTests } from "../test/support/resolve-engines-bin";
 
 describe("resolveHeadlessCommand (against the real forge614-engines binary)", () => {
-  const enginesBin = resolveEnginesBinForTests();
+  // Resolved in beforeAll (not at describe-body/module-collection time) so
+  // that a missing binary produces a clearly attributed test failure for
+  // this file instead of Bun reporting a file-level "error between tests"
+  // that silently drops all of this file's tests from the pass/fail count.
+  let enginesBin: string;
+  beforeAll(() => {
+    enginesBin = resolveEnginesBinForTests();
+  });
 
   test("resolves a supported agent to a runnable command with stdin delivery", async () => {
     const result = await resolveHeadlessCommand({

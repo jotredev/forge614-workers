@@ -9,7 +9,7 @@ interface AgentsListResponse {
 describe("adapter registry completeness", () => {
   test("every agent with supportsHeadlessExec has a registered adapter", async () => {
     const enginesBin = resolveEnginesBinForTests();
-    const proc = Bun.spawn([enginesBin, "agents", "list"], { stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn([enginesBin, "agents", "list"], { stdout: "pipe", stderr: "ignore" });
     const stdout = await new Response(proc.stdout).text();
     await proc.exited;
 
