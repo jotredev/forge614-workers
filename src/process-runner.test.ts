@@ -124,4 +124,18 @@ describe("runProcess", () => {
       expect(result.stdout.truncated).toBe(true);
     }
   });
+
+  test("kills a process that ignores SIGTERM after the grace period", async () => {
+    const result = await runProcess({
+      command: process.execPath,
+      args: [fixturePath("ignore-sigterm.js")],
+      stdin: "",
+      timeoutMs: 50,
+      sigkillGraceMs: 50,
+      maxOutputBytes: 1024,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("timeout");
+  });
 });
