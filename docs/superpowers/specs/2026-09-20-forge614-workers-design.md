@@ -58,9 +58,9 @@ TypeScript on Bun, following the same convention as `forge614-engines`:
 interface EngineAdapter {
   agentId: string;
 
-  // Evaluated against the full captured stderr and a small fixed-size prefix of
-  // stdout (independent of maxOutputBytes) to recognize a quota/session-exhausted
-  // signal specific to this engine's CLI.
+  // Evaluated against the full captured stderr and a fixed 4 KiB (4096 bytes)
+  // prefix of stdout (independent of maxOutputBytes) to recognize a
+  // quota/session-exhausted signal specific to this engine's CLI.
   detectQuotaExhausted(
     stderr: string,
     stdoutPrefix: string
