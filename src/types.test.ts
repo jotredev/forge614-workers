@@ -23,6 +23,7 @@ describe("parseRunInput", () => {
         agentId: "claude-code",
         executable: "/bin/claude",
         prompt: "hi",
+        readableDir: undefined,
         model: undefined,
         reasoningLevel: null,
         timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
@@ -55,9 +56,38 @@ describe("parseRunInput", () => {
       agentId: "codex",
       executable: "/bin/codex",
       prompt: "hi",
+      readableDir: undefined,
       model: "gpt-5-codex",
       reasoningLevel: "high",
       timeoutMs: 5000,
+    });
+  });
+
+  test("parses readableDir through unchanged when a task specifies it", () => {
+    const input = parseRunInput(
+      JSON.stringify({
+        enginesBin: "/bin/forge614-engines",
+        tasks: [
+          {
+            id: "t1",
+            agentId: "claude-code",
+            executable: "/bin/claude",
+            prompt: "hi",
+            readableDir: "/home/user/some-project",
+          },
+        ],
+      })
+    );
+
+    expect(input.tasks[0]).toEqual({
+      id: "t1",
+      agentId: "claude-code",
+      executable: "/bin/claude",
+      prompt: "hi",
+      readableDir: "/home/user/some-project",
+      model: undefined,
+      reasoningLevel: null,
+      timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
     });
   });
 

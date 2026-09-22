@@ -41,6 +41,23 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     });
   });
 
+  test("forwards --readable-dir as --add-dir for claude-code", async () => {
+    const result = await resolveHeadlessCommand({
+      enginesBin,
+      agentId: "claude-code",
+      executable: "/bin/claude",
+      prompt: "hello",
+      readableDir: "/tmp/some-real-dir",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const addDirIndex = result.command.args.indexOf("--add-dir");
+      expect(addDirIndex).toBeGreaterThanOrEqual(0);
+      expect(result.command.args[addDirIndex + 1]).toBe("/tmp/some-real-dir");
+    }
+  });
+
   test("reports HEADLESS_UNSUPPORTED for an agent without headless support", async () => {
     const result = await resolveHeadlessCommand({
       enginesBin,

@@ -53,6 +53,7 @@ export async function runBatch(
         agentId: task.agentId,
         executable: task.executable,
         prompt: task.prompt,
+        readableDir: task.readableDir,
         model: task.model,
         reasoningLevel: task.reasoningLevel,
       });

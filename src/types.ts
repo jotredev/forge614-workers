@@ -5,6 +5,7 @@ export interface TaskSpec {
   agentId: string;
   executable: string;
   prompt: string;
+  readableDir?: string;
   model?: string;
   reasoningLevel: ReasoningLevel | null;
   timeoutMs: number;
@@ -143,6 +144,7 @@ function parseTask(raw: unknown, index: number): TaskSpec {
     agentId: t.agentId as string,
     executable: t.executable as string,
     prompt: t.prompt as string,
+    readableDir: typeof t.readableDir === "string" ? t.readableDir : undefined,
     model: typeof t.model === "string" ? t.model : undefined,
     reasoningLevel,
     timeoutMs,

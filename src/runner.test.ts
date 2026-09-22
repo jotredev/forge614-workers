@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { runBatch } from "./runner";
 import type { TaskSpec, TaskEvent } from "./types";
-import type { ResolveHeadlessResult } from "./engines-client";
+import type { ResolveHeadlessOptions, ResolveHeadlessResult } from "./engines-client";
 import type { RunProcessOptions, RunProcessResult } from "./process-runner";
 
 function makeTask(overrides: Partial<TaskSpec> = {}): TaskSpec {
@@ -343,6 +343,40 @@ describe("runBatch", () => {
     if (runCompleted.event === "run_completed") {
       expect(runCompleted).toMatchObject({ notStarted: 1, pausedByQuota: true, completed: 0, failed: 0 });
     }
+  });
+
+  test("passes task.readableDir through to resolveHeadlessCommand", async () => {
+    let capturedOptions: ResolveHeadlessOptions | undefined;
+    const deps = {
+      resolveHeadlessCommand: async (
+        options: ResolveHeadlessOptions
+      ): Promise<ResolveHeadlessResult> => {
+        capturedOptions = options;
+        return {
+          ok: true,
+          command: { command: "/bin/claude", args: ["-p"], stdin: true },
+        };
+      },
+      runProcess: async (): Promise<RunProcessResult> => ({
+        ok: true,
+        exitCode: 0,
+        durationMs: 10,
+        stdout: { text: "ok", bytes: 2, truncated: false },
+        stderr: { text: "", bytes: 0, truncated: false },
+      }),
+    };
+
+    await runBatch(
+      {
+        enginesBin: "/bin/engines",
+        maxOutputBytes: 1024,
+        tasks: [makeTask({ readableDir: "/home/user/some-project" })],
+      },
+      () => {},
+      deps
+    );
+
+    expect(capturedOptions?.readableDir).toBe("/home/user/some-project");
   });
 
   test("appends the real adapter's extraArgs to the resolved command's args", async () => {

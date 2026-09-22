@@ -42,7 +42,7 @@ TypeScript on Bun, following the same convention as `forge614-engines`:
   knows how to interpret failures from its own engine's CLI, and what extra CLI
   flags it needs to run in an isolated, untrusted working directory.
 - **`engines-client`** — invokes
-  `forge614-engines headless --agent <id> --executable <ruta> --stdin-prompt [--model <m>] [--reasoning-level <n>]`
+  `forge614-engines headless --agent <id> --executable <ruta> --stdin-prompt [--model <m>] [--reasoning-level <n>] [--readable-dir <ruta>]`
   as a subprocess to resolve `{command, args, stdin?}`, and translates Engines'
   known error codes (`HEADLESS_UNSUPPORTED`, `REASONING_LEVEL_UNSUPPORTED`) into
   the `engine_unsupported` task-failure reason (any other error code is a
@@ -98,6 +98,7 @@ interface EngineAdapter {
       "agentId": "claude-code",
       "executable": "/usr/local/bin/claude",
       "prompt": "...",
+      "readableDir": "/path/to/project/atlas/is/analyzing",
       "model": "claude-haiku-4-5",
       "reasoningLevel": null,
       "timeoutMs": 600000
@@ -110,8 +111,16 @@ interface EngineAdapter {
 - `maxOutputBytes` — optional, default `10485760` (10 MiB). Applied independently
   to stdout and to stderr of each task.
 - Per task: `id` is opaque to Workers (Atlas defines it to correlate events with its
-  own Engram sessions). `model`, `reasoningLevel`, and `timeoutMs` are optional.
-  `timeoutMs` defaults to a sensible constant (10 minutes) when omitted.
+  own Engram sessions). `model`, `reasoningLevel`, `timeoutMs`, and `readableDir`
+  are optional. `timeoutMs` defaults to a sensible constant (10 minutes) when
+  omitted.
+- `readableDir` — optional, per task. Grants the spawned AI CLI read access to one
+  additional real directory (e.g. the project Atlas is analyzing) without
+  weakening the `cwd`/`HOME` isolation described in section 5 — omit it and
+  behavior is unchanged from before this field existed. Forwarded to
+  `forge614-engines headless` as `--readable-dir <ruta>`; Engines and each
+  engine's own adapter own the exact CLI flag translation and argument
+  ordering.
 
 ### Output (NDJSON, one event per line on stdout)
 
@@ -164,6 +173,15 @@ Per task:
    between tasks — but user-global config and session state under the real `HOME`
    (or `CODEX_HOME`, etc.) is intentionally shared and accumulates across tasks
    and batches, per point 2's rationale; Workers does not clean this up.
+
+**Known limitation (`readableDir`):** unlike Claude Code (which supports finer-
+grained tool/path restriction via `--allowedTools` and similar), Codex has no
+equivalent way to restrict what it does with a directory once granted via
+`readableDir`. If Codex explores that directory on its own initiative, it can
+read and be influenced by files in it — e.g. that project's own `AGENTS.md` —
+with no technical way to prevent it. This is accepted as low-risk as long as
+Codex's default read-only sandbox is never overridden (which Workers never
+does), and is not something Workers attempts to engineer around.
 
 Known operational note: because each task's temp `cwd` is throwaway but
 `HOME`/`CODEX_HOME` are real, each task run leaves behind one session/project

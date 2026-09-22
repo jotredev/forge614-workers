@@ -11,6 +11,7 @@ export interface ResolveHeadlessOptions {
   agentId: string;
   executable: string;
   prompt: string;
+  readableDir?: string;
   model?: string;
   reasoningLevel?: ReasoningLevel | null;
 }
@@ -39,6 +40,7 @@ export async function resolveHeadlessCommand(
   ];
   if (options.model) args.push("--model", options.model);
   if (options.reasoningLevel) args.push("--reasoning-level", options.reasoningLevel);
+  if (options.readableDir) args.push("--readable-dir", options.readableDir);
 
   // stderr is ignored (not piped) so a chatty child process can never fill the
   // OS pipe buffer and deadlock while we're only awaiting stdout/exited.
