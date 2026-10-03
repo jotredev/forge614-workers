@@ -12,6 +12,7 @@ export interface ResolveHeadlessOptions {
   agentId: string;
   executable: string;
   prompt: string;
+  /** Extra folder the helper may access, forwarded to Engines as `--readable-dir`. It grants access; it does not make anything read-only (see `readOnly`). */
   readableDir?: string;
   /** When `true`, `--read-only` is added so Engines builds the read-only lock. */
   readOnly?: boolean;
@@ -19,6 +20,7 @@ export interface ResolveHeadlessOptions {
   reasoningLevel?: ReasoningLevel | null;
 }
 
+/** Outcome of {@link resolveHeadlessCommand}: the command to run, or Engines' own rejection code and message. */
 export type ResolveHeadlessResult =
   | { ok: true; command: HeadlessCommand }
   | { ok: false; code: string; message: string };
@@ -87,7 +89,8 @@ export async function resolveHeadlessCommand(
   return { ok: true, command: parsed.headless };
 }
 
-export type ResolveHeadlessCommand = typeof resolveHeadlessCommand;
+/** Shape of {@link resolveHeadlessCommand}, so the runner can take a double in tests. */
+export type ResolveHeadlessCommand =typeof resolveHeadlessCommand;
 
 /**
  * Asks Engines (`capabilities --agent <id>`) whether it guarantees the
@@ -97,6 +100,8 @@ export type ResolveHeadlessCommand = typeof resolveHeadlessCommand;
  * would also ignore `--read-only` without an error), `false`, an Engines error
  * such as an unknown agent, output that is not JSON, or a binary that cannot
  * be launched. A lock that cannot be confirmed counts as not guaranteed.
+ * It has no timeout of its own: a capabilities call that never answers blocks
+ * the batch before any command runs.
  */
 export async function engineSupportsReadOnly(enginesBin: string, agentId: string): Promise<boolean> {
   try {

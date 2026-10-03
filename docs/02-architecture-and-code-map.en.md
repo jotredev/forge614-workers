@@ -13,12 +13,12 @@ The system has a coordinator, a translator, a launcher, and specialized detector
 | Process runner | `src/process-runner.ts` | `spawn`, temporary `cwd`, stdin, timeout, capture, and cleanup. |
 | Adapters | `src/adapters/*.ts` | Quota patterns and per-engine extra arguments. |
 | Types | `src/types.ts` | Input validation and event types. |
-| CLI/main | `src/cli.ts`, `src/main.ts` | Reads stdin, emits NDJSON, and chooses the exit code. |
+| CLI/main | `src/cli.ts`, `src/main.ts` | Answers `--version`/`--help`, reads stdin, emits NDJSON, and decides the exit code. |
 
 ## Per-task sequence
 
 1. Emit `task_started`.
-2. Ask Engines for the exact command.
+2. If the task asks for `readOnly`, confirm with Engines that the lock is guaranteed (once per agent per batch); if not, fail without asking for a command. Ask Engines for the exact command.
 3. Create an empty temporary directory.
 4. Run the command with the inherited environment and prompt on stdin.
 5. Apply timeout and byte limits.

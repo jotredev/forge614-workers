@@ -22,7 +22,7 @@ Forge614 Shell es la única interfaz visual. Workers, Engines y Engram son inter
 
 ## Responsabilidades
 
-Workers garantiza orden secuencial, entrega por `stdin`, `cwd` temporal vacío, timeout, límites de captura, detección de cuota por adapter y eventos terminales.
+Workers garantiza orden secuencial, entrega por `stdin`, `cwd` temporal vacío, timeout, límites de captura, detección de cuota por adapter, eventos terminales y que una tarea `readOnly` no corra sin el candado de solo lectura confirmado por Engines.
 
 Atlas decide el plan y correlaciona `task.id` con sus sesiones de Engram. Engines detecta agentes y construye comandos. Engram conserva conocimiento validado. Ninguna responsabilidad se duplica.
 

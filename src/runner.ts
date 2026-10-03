@@ -57,10 +57,10 @@ export async function runBatch(
   let pausedByQuota = false;
   let tasksRun = 0;
 
-  // One answer per agent for this batch, refusals included, so Engines is
-  // asked once however many read-only tasks the agent has.
+  /** Whether Engines guarantees the read-only lock for `agentId`; asked once per agent per batch and remembered, refusals included. */
   const readOnlyGuaranteed = new Map<string, boolean>();
   const checkReadOnlySupport = deps.checkReadOnlySupport ?? engineSupportsReadOnly;
+  /** Answers from {@link readOnlyGuaranteed}, asking Engines only the first time; a failed check counts as not guaranteed. */
   async function isReadOnlyGuaranteed(agentId: string): Promise<boolean> {
     const known = readOnlyGuaranteed.get(agentId);
     if (known !== undefined) return known;
@@ -128,15 +128,18 @@ export async function runBatch(
         failed++;
         // engine_unsupported is reserved specifically for the codes that
         // mean "this agent cannot do what was asked": HEADLESS_UNSUPPORTED,
-        // REASONING_LEVEL_UNSUPPORTED and READ_ONLY_UNSUPPORTED. Any other code is a different
-        // kind of failure and must not be mislabeled as unsupported, since a
-        // caller may permanently avoid a valid combination based on that
-        // label. That includes ENGINES_RESPONSE_INVALID (a malformed or
-        // crashed Engines response) and the two input errors
-        // INVALID_REASONING_LEVEL and UNKNOWN_AGENT: the task named
-        // something that does not exist, which is not a capability gap. All
-        // of them go to generic_error, and the code is preserved in `stderr`
-        // so it isn't lost for diagnostics.
+        // REASONING_LEVEL_UNSUPPORTED and READ_ONLY_UNSUPPORTED. Any other
+        // code is a different kind of failure and must not be mislabeled as
+        // unsupported, since a caller may permanently avoid a valid
+        // combination based on that label. That includes
+        // ENGINES_RESPONSE_INVALID (a malformed or crashed Engines response)
+        // and the two input errors INVALID_REASONING_LEVEL and UNKNOWN_AGENT
+        // returned by headless: the task named something that does not
+        // exist, which is not a capability gap. (A readOnly task with an
+        // unknown agent never gets that far: the capabilities check fails
+        // first and it is reported as READ_ONLY_UNSUPPORTED.) All of them go
+        // to generic_error, and the code is preserved in `stderr` so it isn't
+        // lost for diagnostics.
         const reason =
           resolved.code === "HEADLESS_UNSUPPORTED" ||
           resolved.code === "REASONING_LEVEL_UNSUPPORTED" ||

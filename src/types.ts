@@ -14,6 +14,7 @@ export interface TaskSpec {
   agentId: string;
   executable: string;
   prompt: string;
+  /** Extra folder the helper may access, forwarded to Engines as `--readable-dir`. It grants access; it does not make anything read-only (see `readOnly`). */
   readableDir?: string;
   /**
    * When `true`, the helper must run read-only. Workers forwards it to Engines
@@ -32,6 +33,7 @@ export interface RunInput {
   tasks: TaskSpec[];
 }
 
+/** Why a task failed without finishing. `engine_unsupported` covers HEADLESS_UNSUPPORTED, REASONING_LEVEL_UNSUPPORTED, READ_ONLY_UNSUPPORTED and a read-only lock Workers could not confirm; input errors from Engines go to `generic_error`. */
 export type TaskFailureReason =
   | "timeout"
   | "engine_unsupported"
@@ -96,6 +98,7 @@ export const DEFAULT_TASK_TIMEOUT_MS = 10 * 60 * 1000;
 
 export class InvalidInputError extends Error {}
 
+/** Parses the stdin document into a RunInput; throws InvalidInputError for broken JSON or any field with the wrong shape, before any task runs. */
 export function parseRunInput(raw: string): RunInput {
   let data: unknown;
   try {
