@@ -6,7 +6,7 @@
 |---|---|---|
 | `quota_exhausted` | Salida no cero y adapter detecta patrón de cuota/sesión | Sí |
 | `timeout` | Vence el timeout | No |
-| `engine_unsupported` | Engines devuelve `HEADLESS_UNSUPPORTED` o `REASONING_LEVEL_UNSUPPORTED` | No |
+| `engine_unsupported` | Engines devuelve `HEADLESS_UNSUPPORTED`, `REASONING_LEVEL_UNSUPPORTED` o `READ_ONLY_UNSUPPORTED`, o una tarea con `readOnly` no puede confirmar el candado (`stderr`: `READ_ONLY_UNSUPPORTED: <mensaje>`, sin correr ninguna orden) | No |
 | `spawn_error` | El sistema no puede lanzar el ejecutable | No |
 | `generic_error` | Cualquier otro rechazo (incluidos `INVALID_REASONING_LEVEL` y `UNKNOWN_AGENT`), salida no cero o excepción de tarea | No |
 

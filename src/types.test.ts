@@ -138,6 +138,51 @@ describe("parseRunInput", () => {
     }
   );
 
+  test.each([
+    [true, true],
+    [false, false],
+    [undefined, undefined],
+  ])("parses readOnly %p into %p", (given, expected) => {
+    const input = parseRunInput(
+      JSON.stringify({
+        enginesBin: "/bin/forge614-engines",
+        tasks: [
+          {
+            id: "t1",
+            agentId: "claude-code",
+            executable: "/bin/claude",
+            prompt: "hi",
+            readOnly: given,
+          },
+        ],
+      })
+    );
+
+    expect(input.tasks[0].readOnly).toBe(expected);
+  });
+
+  test.each([["yes"], [1], [0], [null], [{}]])(
+    "throws InvalidInputError when readOnly is %p instead of true, false or absent",
+    (given) => {
+      expect(() =>
+        parseRunInput(
+          JSON.stringify({
+            enginesBin: "/bin/forge614-engines",
+            tasks: [
+              {
+                id: "t1",
+                agentId: "claude-code",
+                executable: "/bin/claude",
+                prompt: "hi",
+                readOnly: given,
+              },
+            ],
+          })
+        )
+      ).toThrow(InvalidInputError);
+    }
+  );
+
   test.each(["minimal", "banana"])(
     "throws InvalidInputError when reasoningLevel is the unlisted text %s",
     (level) => {

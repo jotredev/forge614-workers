@@ -9,7 +9,7 @@ The system has a coordinator, a translator, a launcher, and specialized detector
 | Component | Source | Function |
 |---|---|---|
 | Runner | `src/runner.ts` | Sequential loop, continuation after failures, quota pause, and `run_completed`. |
-| Engines client | `src/engines-client.ts` | Invokes `forge614-engines headless` with `--stdin-prompt` and maps known errors. |
+| Engines client | `src/engines-client.ts` | Invokes `forge614-engines headless` with `--stdin-prompt`, maps known errors, and asks `capabilities` for `supportsReadOnly`. |
 | Process runner | `src/process-runner.ts` | `spawn`, temporary `cwd`, stdin, timeout, capture, and cleanup. |
 | Adapters | `src/adapters/*.ts` | Quota patterns and per-engine extra arguments. |
 | Types | `src/types.ts` | Input validation and event types. |

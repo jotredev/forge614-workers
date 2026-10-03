@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll } from "bun:test";
-import { resolveHeadlessCommand } from "./engines-client";
+import { resolveHeadlessCommand, engineSupportsReadOnly } from "./engines-client";
 import type { ReasoningLevel } from "./types";
 import { resolveEnginesBinForTests } from "../test/support/resolve-engines-bin";
 
@@ -57,6 +57,66 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
       expect(addDirIndex).toBeGreaterThanOrEqual(0);
       expect(result.command.args[addDirIndex + 1]).toBe("/tmp/some-real-dir");
     }
+  });
+
+  test("forwards --read-only to claude-code as the exact read-only lock, before -p", async () => {
+    const result = await resolveHeadlessCommand({
+      enginesBin,
+      agentId: "claude-code",
+      executable: "/bin/claude",
+      prompt: "hello",
+      readOnly: true,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      command: {
+        command: "/bin/claude",
+        args: [
+          "--tools",
+          "Read,Grep,Glob",
+          "--permission-mode",
+          "dontAsk",
+          "--strict-mcp-config",
+          "-p",
+        ],
+        stdin: true,
+      },
+    });
+  });
+
+  test("forwards --read-only to codex as the exact read-only lock", async () => {
+    const result = await resolveHeadlessCommand({
+      enginesBin,
+      agentId: "codex",
+      executable: "/bin/codex",
+      prompt: "hello",
+      readOnly: true,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      command: {
+        command: "/bin/codex",
+        args: ["exec", "--sandbox", "read-only", "--ignore-user-config"],
+        stdin: true,
+      },
+    });
+  });
+
+  test("does not add any lock when readOnly is false", async () => {
+    const result = await resolveHeadlessCommand({
+      enginesBin,
+      agentId: "claude-code",
+      executable: "/bin/claude",
+      prompt: "hello",
+      readOnly: false,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      command: { command: "/bin/claude", args: ["-p"], stdin: true },
+    });
   });
 
   test("reports UNKNOWN_AGENT for an agent id that Engines does not know", async () => {
@@ -141,5 +201,47 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("ENGINES_RESPONSE_INVALID");
+  });
+});
+
+describe("engineSupportsReadOnly", () => {
+  const fixture = (name: string) => new URL(`../test/fixtures/${name}`, import.meta.url).pathname;
+
+  test.each(["claude-code", "codex"])(
+    "returns true for %s against the real forge614-engines binary",
+    async (agentId) => {
+      expect(await engineSupportsReadOnly(resolveEnginesBinForTests(), agentId)).toBe(true);
+    }
+  );
+
+  test("returns false for an agent id that Engines does not know", async () => {
+    expect(await engineSupportsReadOnly(resolveEnginesBinForTests(), "not-a-real-agent")).toBe(
+      false
+    );
+  });
+
+  test("returns false when capabilities has no supportsReadOnly field (an Engines older than 1.17.0)", async () => {
+    expect(
+      await engineSupportsReadOnly(fixture("fake-engines-capabilities-no-read-only.js"), "claude-code")
+    ).toBe(false);
+  });
+
+  test("returns false when capabilities says supportsReadOnly is false", async () => {
+    expect(
+      await engineSupportsReadOnly(
+        fixture("fake-engines-capabilities-read-only-false.js"),
+        "claude-code"
+      )
+    ).toBe(false);
+  });
+
+  test("returns false instead of throwing when the binary prints non-JSON stdout", async () => {
+    expect(
+      await engineSupportsReadOnly(fixture("fake-engines-invalid-json.sh"), "claude-code")
+    ).toBe(false);
+  });
+
+  test("returns false instead of throwing when the binary cannot be launched", async () => {
+    expect(await engineSupportsReadOnly("/definitely/does/not/exist", "claude-code")).toBe(false);
   });
 });

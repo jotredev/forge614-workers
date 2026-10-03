@@ -415,6 +415,186 @@ describe("runBatch", () => {
     expect(capturedOptions?.readableDir).toBe("/home/user/some-project");
   });
 
+  describe("read-only lock", () => {
+    const REFUSAL =
+      'READ_ONLY_UNSUPPORTED: Engines does not guarantee read-only execution for agent "claude-code"; the task was not run';
+
+    /** Builds doubles that record every call so a test can prove what never happened. */
+    function makeLockDeps(lockCheck: (agentId: string) => Promise<boolean>) {
+      const calls = {
+        lockChecks: [] as string[],
+        resolves: [] as ResolveHeadlessOptions[],
+        spawns: 0,
+        spawnedArgs: [] as string[][],
+      };
+      const deps = {
+        checkReadOnlySupport: async (_enginesBin: string, agentId: string): Promise<boolean> => {
+          calls.lockChecks.push(agentId);
+          return lockCheck(agentId);
+        },
+        resolveHeadlessCommand: async (options: ResolveHeadlessOptions): Promise<ResolveHeadlessResult> => {
+          calls.resolves.push(options);
+          const lock = options.readOnly ? ["--tools", "Read,Grep,Glob"] : [];
+          return { ok: true, command: { command: "/bin/claude", args: [...lock, "-p"], stdin: true } };
+        },
+        runProcess: async (options: RunProcessOptions): Promise<RunProcessResult> => {
+          calls.spawns++;
+          calls.spawnedArgs.push(options.args);
+          return {
+            ok: true,
+            exitCode: 0,
+            durationMs: 1,
+            stdout: { text: "ok", bytes: 2, truncated: false },
+            stderr: { text: "", bytes: 0, truncated: false },
+          };
+        },
+      };
+      return { calls, deps };
+    }
+
+    test("refuses a readOnly task when Engines does not guarantee the lock, asks for no command and never launches the agent", async () => {
+      const events: TaskEvent[] = [];
+      const { calls, deps } = makeLockDeps(async () => false);
+
+      await runBatch(
+        { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask({ readOnly: true })] },
+        (e) => events.push(e),
+        deps
+      );
+
+      expect(events.map((e) => e.event)).toEqual(["task_started", "task_failed", "run_completed"]);
+      expect(events[1]).toMatchObject({
+        event: "task_failed",
+        reason: "engine_unsupported",
+        exitCode: null,
+        stderr: REFUSAL,
+      });
+      expect(calls.resolves).toHaveLength(0);
+      expect(calls.spawns).toBe(0);
+      expect(events[2]).toMatchObject({ totalTasks: 1, completed: 0, failed: 1, notStarted: 0 });
+    });
+
+    test("refuses a readOnly task when the lock check itself fails with an error", async () => {
+      const events: TaskEvent[] = [];
+      const { calls, deps } = makeLockDeps(async () => {
+        throw new Error("engines crashed");
+      });
+
+      await runBatch(
+        { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask({ readOnly: true })] },
+        (e) => events.push(e),
+        deps
+      );
+
+      expect(events[1]).toMatchObject({
+        event: "task_failed",
+        reason: "engine_unsupported",
+        stderr: REFUSAL,
+      });
+      expect(calls.resolves).toHaveLength(0);
+      expect(calls.spawns).toBe(0);
+    });
+
+    test("runs a readOnly task when Engines guarantees the lock, and the command carries the lock", async () => {
+      const events: TaskEvent[] = [];
+      const { calls, deps } = makeLockDeps(async () => true);
+
+      await runBatch(
+        { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask({ readOnly: true })] },
+        (e) => events.push(e),
+        deps
+      );
+
+      expect(events.map((e) => e.event)).toEqual(["task_started", "task_completed", "run_completed"]);
+      expect(calls.resolves.map((o) => o.readOnly)).toEqual([true]);
+      expect(calls.spawnedArgs).toEqual([["--tools", "Read,Grep,Glob", "-p"]]);
+    });
+
+    test("asks Engines about the lock once per agent for the whole batch and reuses a refusal", async () => {
+      const events: TaskEvent[] = [];
+      const { calls, deps } = makeLockDeps(async () => false);
+
+      await runBatch(
+        {
+          enginesBin: "/bin/engines",
+          maxOutputBytes: 1024,
+          tasks: [
+            makeTask({ id: "t1", readOnly: true }),
+            makeTask({ id: "t2", readOnly: true }),
+            makeTask({ id: "t3", agentId: "codex", executable: "/bin/codex", readOnly: true }),
+          ],
+        },
+        (e) => events.push(e),
+        deps
+      );
+
+      expect(calls.lockChecks).toEqual(["claude-code", "codex"]);
+      expect(events.filter((e) => e.event === "task_failed")).toHaveLength(3);
+      expect(calls.spawns).toBe(0);
+    });
+
+    test("asks only once for two readOnly tasks of the same agent that Engines does guarantee", async () => {
+      const { calls, deps } = makeLockDeps(async () => true);
+
+      await runBatch(
+        {
+          enginesBin: "/bin/engines",
+          maxOutputBytes: 1024,
+          tasks: [makeTask({ id: "t1", readOnly: true }), makeTask({ id: "t2", readOnly: true })],
+        },
+        () => {},
+        deps
+      );
+
+      expect(calls.lockChecks).toEqual(["claude-code"]);
+      expect(calls.spawns).toBe(2);
+    });
+
+    test.each([[undefined], [false]])(
+      "never asks Engines about the lock when readOnly is %p",
+      async (readOnly) => {
+        const { calls, deps } = makeLockDeps(async () => false);
+
+        await runBatch(
+          {
+            enginesBin: "/bin/engines",
+            maxOutputBytes: 1024,
+            tasks: [makeTask({ id: "t1", readOnly }), makeTask({ id: "t2", readOnly })],
+          },
+          () => {},
+          deps
+        );
+
+        expect(calls.lockChecks).toHaveLength(0);
+        expect(calls.spawns).toBe(2);
+        expect(calls.resolves.map((o) => o.readOnly)).toEqual([readOnly, readOnly]);
+      }
+    );
+
+    test("marks a task as engine_unsupported when headless itself answers READ_ONLY_UNSUPPORTED", async () => {
+      const events: TaskEvent[] = [];
+      const { calls, deps } = makeLockDeps(async () => true);
+      deps.resolveHeadlessCommand = async (): Promise<ResolveHeadlessResult> => ({
+        ok: false,
+        code: "READ_ONLY_UNSUPPORTED",
+        message: "claude-code cannot guarantee read-only execution",
+      });
+
+      await runBatch(
+        { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask({ readOnly: true })] },
+        (e) => events.push(e),
+        deps
+      );
+
+      expect(events[1]).toMatchObject({
+        event: "task_failed",
+        reason: "engine_unsupported",
+        stderr: "READ_ONLY_UNSUPPORTED: claude-code cannot guarantee read-only execution",
+      });
+      expect(calls.spawns).toBe(0);
+    });
+  });
+
   test("appends the real adapter's extraArgs to the resolved command's args", async () => {
     let capturedArgs: string[] | undefined;
     const deps = {

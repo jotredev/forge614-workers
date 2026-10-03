@@ -8,12 +8,19 @@ export const REASONING_LEVELS = ["low", "medium", "high", "xhigh", "max"] as con
 /** One of the {@link REASONING_LEVELS}. */
 export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
+/** One unit of work in a batch, as Atlas describes it on stdin. */
 export interface TaskSpec {
   id: string;
   agentId: string;
   executable: string;
   prompt: string;
   readableDir?: string;
+  /**
+   * When `true`, the helper must run read-only. Workers forwards it to Engines
+   * as `--read-only` and refuses to run the task (`engine_unsupported`,
+   * `READ_ONLY_UNSUPPORTED`) unless Engines guarantees the lock.
+   */
+  readOnly?: boolean;
   model?: string;
   reasoningLevel: ReasoningLevel | null;
   timeoutMs: number;
@@ -152,12 +159,20 @@ function parseTask(raw: unknown, index: number): TaskSpec {
     reasoningLevel = t.reasoningLevel as ReasoningLevel;
   }
 
+  // Unlike `readableDir`/`model`, a wrong `readOnly` is never dropped: a
+  // silently ignored lock would run a helper that was meant to be read-only
+  // with full access.
+  if (t.readOnly !== undefined && typeof t.readOnly !== "boolean") {
+    throw new InvalidInputError(`tasks[${index}].readOnly must be true, false or absent`);
+  }
+
   return {
     id: t.id as string,
     agentId: t.agentId as string,
     executable: t.executable as string,
     prompt: t.prompt as string,
     readableDir: typeof t.readableDir === "string" ? t.readableDir : undefined,
+    readOnly: t.readOnly,
     model: typeof t.model === "string" ? t.model : undefined,
     reasoningLevel,
     timeoutMs,
