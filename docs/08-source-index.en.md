@@ -20,12 +20,11 @@
 - `src/adapters/registry.ts`: adapter registry.
 - `src/adapters/_template.ts`: extension template.
 - `src/cli.ts`: input/output boundary and fatal errors.
-- `src/main.ts`: binary entry point.
-- `src/version.ts`: public version.
+- `src/main.ts`: binary entry point; answers `--version`/`--help` before reading stdin and takes the version from `package.json`.
 
 ## Tests and fixtures
 
-`src/**/*.test.ts` covers types, adapters, registry, Engines client, runner, process runner, CLI, and version. `test/e2e.test.ts` wires the full flow with doubles. `test/fixtures/` contains stdin echo, quota, oversized output, SIGTERM-ignoring, cwd/env printing, and fake Engines processes.
+`src/**/*.test.ts` covers types, adapters, registry, Engines client, runner, process runner, and CLI. `test/e2e.test.ts` wires the full flow with doubles and checks `--version` and `--help`. `test/fixtures/` contains stdin echo, quota, oversized output, SIGTERM-ignoring, cwd/env printing, and fake Engines processes.
 
 ## Maintenance documentation
 

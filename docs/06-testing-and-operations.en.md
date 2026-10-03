@@ -14,6 +14,8 @@ bun run build
 
 `bun build --compile` produces `dist/forge614-workers`.
 
+The binary answers `forge614-workers --version` (or `-v`), which prints `forge614-workers <version>`, and `--help` (or `-h`), which prints a short help; both exit 0 without waiting for standard input. With any other argument it still waits for the batch on stdin. The version is read from `package.json`, the single source.
+
 ## Required coverage
 
 - Strict ordering and immediate quota pause.
@@ -23,5 +25,7 @@ bun run build
 - Empty cwd, complete environment inheritance, and temp cleanup.
 - Spawn error, invalid JSON, and non-executable Engines binary.
 - Registry completeness: every headless-capable Engines agent has an adapter.
+- Read-only lock: a `readOnly` task without a confirmed lock launches no command.
+- `--version` and `--help` without reading stdin.
 
 Real AI CLIs must not run in the normal test suite.

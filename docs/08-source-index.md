@@ -20,12 +20,11 @@
 - `src/adapters/registry.ts`: registro de adapters.
 - `src/adapters/_template.ts`: plantilla de extensión.
 - `src/cli.ts`: frontera de entrada/salida y fatal errors.
-- `src/main.ts`: punto de entrada del binario.
-- `src/version.ts`: versión pública.
+- `src/main.ts`: punto de entrada del binario; atiende `--version`/`--help` antes de leer stdin y toma la versión de `package.json`.
 
 ## Tests y fixtures
 
-Los tests `src/**/*.test.ts` cubren tipos, adapters, registro, Engines client, runner, process runner, CLI y versión. `test/e2e.test.ts` conecta el flujo completo con dobles. `test/fixtures/` contiene procesos que hacen echo de stdin, producen cuota, exceden salida, ignoran SIGTERM, imprimen cwd/env y simulan Engines.
+Los tests `src/**/*.test.ts` cubren tipos, adapters, registro, Engines client, runner, process runner y CLI. `test/e2e.test.ts` conecta el flujo completo con dobles y comprueba `--version` y `--help`. `test/fixtures/` contiene procesos que hacen echo de stdin, producen cuota, exceden salida, ignoran SIGTERM, imprimen cwd/env y simulan Engines.
 
 ## Documentación de mantenimiento
 
