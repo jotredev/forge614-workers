@@ -1,6 +1,6 @@
 # forge614-workers
 
-Brazo ejecutor no interactivo de Forge614. Recibe un documento JSON por `stdin`, resuelve cada tarea con `forge614-engines` y ejecuta procesos Claude Code/Codex estrictamente en secuencia. Devuelve eventos NDJSON por `stdout`.
+Brazo ejecutor no interactivo de Forge614. Recibe un documento JSON por `stdin`, resuelve cada tarea con `forge614-engines` y ejecuta procesos Claude Code/Codex estrictamente en secuencia. Devuelve eventos NDJSON por `stdout`. Responde `--version` y `--help` sin leer `stdin`, y una tarea puede pedir `readOnly: true` para que el ayudante solo lea (ver [03](docs/03-data-contract.md)).
 
 ## Documentación
 

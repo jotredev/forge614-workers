@@ -4,7 +4,7 @@
 
 ## What it is
 
-`forge614-workers` is Forge614's non-interactive execution arm. It receives a JSON list of tasks already decided by Atlas —engine, executable, model, reasoning level, and prompt— asks `forge614-engines` to resolve each command, and runs tasks strictly sequentially.
+`forge614-workers` is Forge614's non-interactive execution arm. It receives a JSON list of tasks already decided by Atlas —engine, executable, model, reasoning level, whether it is read-only (`readOnly`), and prompt— asks `forge614-engines` to resolve each command, and runs tasks strictly sequentially.
 
 Atlas consumes it today; `forge614-ai` will consume it in the future. It does not talk to people, write to Engram, or retain state between runs.
 
@@ -17,6 +17,8 @@ cat run.json | forge614-workers
 ```
 
 Output is one NDJSON event per line on `stdout`. `run_completed` is the final line of every non-fatal run.
+
+`forge614-workers --version` prints the version and `forge614-workers --help` a short help; neither waits for `stdin`.
 
 ## Boundaries
 

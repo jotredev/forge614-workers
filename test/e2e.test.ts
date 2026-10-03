@@ -1,5 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { join } from "node:path";
+import pkg from "../package.json";
 
 const MAIN_ENTRY = join(import.meta.dir, "..", "src", "main.ts");
 const FIXTURES = join(import.meta.dir, "fixtures");
@@ -45,7 +46,7 @@ describe("forge614-workers --version and --help", () => {
 
     expect(hung).toBe(false);
     expect(exitCode).toBe(0);
-    expect(stdout).toBe("forge614-workers 0.1.0\n");
+    expect(stdout).toBe(`forge614-workers ${pkg.version}\n`);
   });
 
   test.each(["--help", "-h"])("%s prints help that names --version and exits 0 without waiting for stdin", async (flag) => {

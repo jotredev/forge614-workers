@@ -8,7 +8,7 @@ Redirecting `HOME`/`CODEX_HOME` to an empty directory broke real authenticated s
 
 ## Read-only lock
 
-A task with `readOnly: true` is like lending someone a book they may read but not write in. Workers does not build that lock: Engines does, with `--read-only`, differently for each agent. Claude Code gets only the reading tools (`Read`, `Grep`, `Glob`), in the permission mode that denies everything else instead of asking, and loads none of the user's MCP connections. Codex gets its read-only sandbox requested explicitly and is launched without reading its `config.toml`, so it has no MCP either. That way the helper cannot write files or save to Engram.
+A task with `readOnly: true` is like lending someone a book they may read but not write in. `readableDir` is not a substitute for the lock: it adds a folder the helper can reach but does not stop writing there; `readOnly` is what stops writing. Workers does not build that lock: Engines does, with `--read-only`, differently for each agent. Claude Code gets only the reading tools (`Read`, `Grep`, `Glob`), in the permission mode that denies everything else instead of asking, and loads none of the user's MCP connections. Codex gets its read-only sandbox requested explicitly and is launched without reading its `config.toml`, so it has no MCP either. That way the helper cannot write files or save to Engram.
 
 Because an Engines older than 1.17.0 would ignore `--read-only` without saying so, Workers checks before running that `capabilities` reports `supportsReadOnly: true` for that agent. If it cannot confirm it, nothing runs (see `05`).
 

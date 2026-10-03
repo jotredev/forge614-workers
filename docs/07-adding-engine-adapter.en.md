@@ -10,4 +10,6 @@ The full runbook is [`adding-a-new-engine-adapter.md`](adding-a-new-engine-adapt
 6. Register the adapter in `src/adapters/registry.ts`.
 7. Add quota and generic-error tests; run `bun test`.
 
+The read-only lock needs no change in Workers: Engines' `supportsReadOnly` decides it and, if `false`, the agent's `readOnly` tasks are refused automatically.
+
 Never invent a credential-moving mechanism. If isolation fails, document the evidence and investigate it separately.

@@ -5,13 +5,14 @@
 - `README.md`: entrada del proyecto (pendiente de ampliar).
 - `package.json`: versión `0.1.0`, scripts de test/typecheck/build y dependencias.
 - `FORGE614_ECOSYSTEM_CONTRACT.md`: límites y contratos entre productos.
+- `.forge614/project.json`: identidad portátil del proyecto en Engram (id del proyecto y del grupo `forge614`).
 - `docs/superpowers/specs/2026-09-20-forge614-workers-design.md`: especificación aprobada.
 - `docs/superpowers/plans/2026-09-20-forge614-workers-implementation.md`: plan de implementación.
 
 ## Código de producción
 
 - `src/types.ts`: entrada, defaults, validación, tipos de eventos y razones.
-- `src/engines-client.ts`: cliente subprocess de Engines.
+- `src/engines-client.ts`: cliente subprocess de Engines (`headless` y `capabilities`).
 - `src/process-runner.ts`: spawn, stdin, cwd, timeout, captura y limpieza.
 - `src/runner.ts`: orquestación secuencial y resumen.
 - `src/adapters/contract.ts`: interfaz `EngineAdapter`.

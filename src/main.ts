@@ -9,10 +9,15 @@ Runs a batch of non-interactive agent tasks, one at a time, and prints one JSON 
 The batch is read from stdin as a single JSON document:
   {"enginesBin": "<path>", "tasks": [{"id": "...", "agentId": "...", "executable": "...", "prompt": "..."}]}
 
+Optional fields of each task: "model", "reasoningLevel" (low, medium, high, xhigh or max;
+Engines checks it per agent), "timeoutMs", "readableDir" (extra folder the helper may access)
+and "readOnly" (true: the helper may only read; the task is refused if Engines does not
+guarantee the lock).
+
 Usage:
   forge614-workers < batch.json
-  forge614-workers --version   Print the version and exit.
-  forge614-workers --help      Print this help and exit.
+  forge614-workers --version   Print the version and exit (also -v).
+  forge614-workers --help      Print this help and exit (also -h).
 `;
 
 /**

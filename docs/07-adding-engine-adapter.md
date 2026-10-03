@@ -10,4 +10,6 @@ El runbook completo está en [`adding-a-new-engine-adapter.md`](adding-a-new-eng
 6. Registra el adapter en `src/adapters/registry.ts`.
 7. Añade pruebas de cuota y error genérico; ejecuta `bun test`.
 
+El candado de solo lectura no requiere cambios en Workers: lo decide `supportsReadOnly` de Engines y, si es `false`, las tareas `readOnly` de ese agente se rechazan solas.
+
 Nunca inventes un método para mover credenciales. Si el aislamiento falla, documenta la evidencia y realiza una investigación separada.

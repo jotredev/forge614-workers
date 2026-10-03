@@ -13,12 +13,12 @@ El sistema tiene un coordinador, un traductor, un lanzador y detectores especial
 | Process runner | `src/process-runner.ts` | `spawn`, `cwd` temporal, stdin, timeout, captura y limpieza. |
 | Adapters | `src/adapters/*.ts` | Patrones de cuota y argumentos extra por motor. |
 | Types | `src/types.ts` | Validación de entrada y tipos de eventos. |
-| CLI/main | `src/cli.ts`, `src/main.ts` | Lee stdin, emite NDJSON y determina el exit code. |
+| CLI/main | `src/cli.ts`, `src/main.ts` | Atiende `--version`/`--help`, lee stdin, emite NDJSON y determina el exit code. |
 
 ## Secuencia por tarea
 
 1. Emitir `task_started`.
-2. Pedir a Engines el comando exacto.
+2. Si la tarea pide `readOnly`, confirmar con Engines que el candado está garantizado (una vez por agente y lote); si no, fallar sin pedir comando. Pedir a Engines el comando exacto.
 3. Crear un directorio temporal vacío.
 4. Ejecutar el comando con entorno heredado y prompt por stdin.
 5. Aplicar timeout y límites de bytes.

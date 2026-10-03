@@ -8,7 +8,7 @@ Redirigir `HOME`/`CODEX_HOME` a un directorio vacío rompió sesiones autenticad
 
 ## Candado de solo lectura
 
-Una tarea con `readOnly: true` es como prestar un libro a alguien que solo puede leerlo, no anotarlo. Workers no construye ese candado: lo arma Engines con `--read-only`, distinto en cada motor. Claude Code recibe únicamente las herramientas de lectura (`Read`, `Grep`, `Glob`), con el modo de permisos que niega lo demás en vez de preguntar y sin cargar ninguna conexión MCP del usuario. Codex recibe su sandbox de solo lectura pedido de forma explícita y se lanza sin leer su `config.toml`, así que tampoco tiene MCP. Así el ayudante no puede escribir archivos ni guardar en Engram.
+Una tarea con `readOnly: true` es como prestar un libro a alguien que solo puede leerlo, no anotarlo. `readableDir` no sustituye al candado: agrega una carpeta a la que el ayudante tiene acceso, pero no impide escribir en ella; lo que impide escribir es `readOnly`. Workers no construye ese candado: lo arma Engines con `--read-only`, distinto en cada motor. Claude Code recibe únicamente las herramientas de lectura (`Read`, `Grep`, `Glob`), con el modo de permisos que niega lo demás en vez de preguntar y sin cargar ninguna conexión MCP del usuario. Codex recibe su sandbox de solo lectura pedido de forma explícita y se lanza sin leer su `config.toml`, así que tampoco tiene MCP. Así el ayudante no puede escribir archivos ni guardar en Engram.
 
 Como un Engines anterior a 1.17.0 ignoraría `--read-only` sin avisar, Workers comprueba antes de correr que `capabilities` diga `supportsReadOnly: true` para ese motor. Si no puede confirmarlo, no corre nada (ver `05`).
 

@@ -4,7 +4,7 @@
 
 ## Qué es
 
-`forge614-workers` es el brazo ejecutor no interactivo de Forge614. Recibe una lista JSON de tareas ya decididas por Atlas —motor, ejecutable, modelo, nivel de razonamiento y prompt—, resuelve cada comando mediante `forge614-engines` y ejecuta las tareas estrictamente en secuencia.
+`forge614-workers` es el brazo ejecutor no interactivo de Forge614. Recibe una lista JSON de tareas ya decididas por Atlas —motor, ejecutable, modelo, nivel de razonamiento, si es de solo lectura (`readOnly`) y prompt—, resuelve cada comando mediante `forge614-engines` y ejecuta las tareas estrictamente en secuencia.
 
 Consume `forge614-atlas` hoy y será consumido también por `forge614-ai` en el futuro. No habla con personas, no escribe en Engram y no conserva estado entre corridas.
 
@@ -17,6 +17,8 @@ cat run.json | forge614-workers
 ```
 
 Salida: un evento NDJSON por línea en `stdout`. `run_completed` es la última línea de cualquier corrida no fatal.
+
+`forge614-workers --version` imprime la versión y `forge614-workers --help` una ayuda corta; ninguno espera `stdin`.
 
 ## Límites
 
