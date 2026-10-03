@@ -14,6 +14,8 @@ bun run build
 
 `bun build --compile` genera `dist/forge614-workers`.
 
+El binario responde `forge614-workers --version` (o `-v`), que imprime `forge614-workers <versión>`, y `--help` (o `-h`), que imprime una ayuda corta; ambos salen con código 0 sin esperar la entrada estándar. Con cualquier otro argumento sigue esperando el lote por stdin. La versión se lee de `package.json`, la única fuente.
+
 ## Qué debe cubrirse
 
 - Orden estrictamente secuencial y pausa inmediata por cuota.
@@ -23,5 +25,7 @@ bun run build
 - cwd vacío, herencia completa de entorno y limpieza temporal.
 - spawn error, JSON inválido y binario Engines no ejecutable.
 - Registro completo: todo agente headless de Engines tiene adapter.
+- Candado de solo lectura: una tarea `readOnly` sin candado confirmado no lanza ninguna orden.
+- `--version` y `--help` sin leer stdin.
 
 No se deben lanzar CLIs de IA reales en la suite normal.
