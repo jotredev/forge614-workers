@@ -116,6 +116,50 @@ describe("parseRunInput", () => {
     ).toThrow(InvalidInputError);
   });
 
+  test.each(["low", "medium", "high", "xhigh", "max"] as const)(
+    "accepts the Engines reasoning level %s unchanged",
+    (level) => {
+      const input = parseRunInput(
+        JSON.stringify({
+          enginesBin: "/bin/forge614-engines",
+          tasks: [
+            {
+              id: "t1",
+              agentId: "claude-code",
+              executable: "/bin/claude",
+              prompt: "hi",
+              reasoningLevel: level,
+            },
+          ],
+        })
+      );
+
+      expect(input.tasks[0].reasoningLevel).toBe(level);
+    }
+  );
+
+  test.each(["minimal", "banana"])(
+    "throws InvalidInputError when reasoningLevel is the unlisted text %s",
+    (level) => {
+      expect(() =>
+        parseRunInput(
+          JSON.stringify({
+            enginesBin: "/bin/forge614-engines",
+            tasks: [
+              {
+                id: "t1",
+                agentId: "claude-code",
+                executable: "/bin/claude",
+                prompt: "hi",
+                reasoningLevel: level,
+              },
+            ],
+          })
+        )
+      ).toThrow(InvalidInputError);
+    }
+  );
+
   test("throws InvalidInputError when reasoningLevel is an invalid value", () => {
     expect(() =>
       parseRunInput(

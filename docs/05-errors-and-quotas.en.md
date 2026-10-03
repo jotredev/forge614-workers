@@ -8,7 +8,7 @@
 | `timeout` | Timeout expires | No |
 | `engine_unsupported` | Engines returns `HEADLESS_UNSUPPORTED` or `REASONING_LEVEL_UNSUPPORTED` | No |
 | `spawn_error` | OS cannot launch the executable | No |
-| `generic_error` | Any other rejection, non-zero exit, or task exception | No |
+| `generic_error` | Any other rejection (including `INVALID_REASONING_LEVEL` and `UNKNOWN_AGENT`), non-zero exit, or task exception | No |
 
 A process with exit code 0 is never quota-exhausted even if its text mentions limits. On quota, later tasks do not start and `run_completed` is emitted.
 
@@ -21,4 +21,4 @@ A process with exit code 0 is never quota-exhausted even if its text mentions li
 
 ## Diagnosis
 
-Keep `stderr` and true observed sizes. For generic Engines rejections, the original code is preserved in the task event's `stderr`. Do not turn failures into automatic retries: Atlas decides how to resume.
+Keep `stderr` and true observed sizes. For generic Engines rejections, the original code is preserved in the task event's `stderr`. `INVALID_REASONING_LEVEL` and `UNKNOWN_AGENT` are input errors (the task named something that does not exist), not a capability gap of the agent, so they are not `engine_unsupported`. Do not turn failures into automatic retries: Atlas decides how to resume.

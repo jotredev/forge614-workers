@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { resolveHeadlessCommand } from "./engines-client";
+import type { ReasoningLevel } from "./types";
 import { resolveEnginesBinForTests } from "../test/support/resolve-engines-bin";
 
 describe("resolveHeadlessCommand (against the real forge614-engines binary)", () => {
@@ -58,19 +59,19 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     }
   });
 
-  test("reports HEADLESS_UNSUPPORTED for an agent without headless support", async () => {
+  test("reports UNKNOWN_AGENT for an agent id that Engines does not know", async () => {
     const result = await resolveHeadlessCommand({
       enginesBin,
-      agentId: "cursor",
-      executable: "/bin/cursor",
+      agentId: "not-a-real-agent",
+      executable: "/bin/not-a-real-agent",
       prompt: "hello",
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("HEADLESS_UNSUPPORTED");
+    if (!result.ok) expect(result.code).toBe("UNKNOWN_AGENT");
   });
 
-  test("reports REASONING_LEVEL_UNSUPPORTED when claude-code is asked for a reasoning level", async () => {
+  test("resolves claude-code with a reasoning level and passes it as --effort", async () => {
     const result = await resolveHeadlessCommand({
       enginesBin,
       agentId: "claude-code",
@@ -79,8 +80,30 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
       reasoningLevel: "high",
     });
 
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const effortIndex = result.command.args.indexOf("--effort");
+      expect(effortIndex).toBeGreaterThanOrEqual(0);
+      expect(result.command.args[effortIndex + 1]).toBe("high");
+    }
+  });
+
+  // With Engines 1.17.0 every agent accepts all five levels that Workers
+  // accepts, so no level is valid for Workers yet invalid for an agent and a
+  // test of that exact case cannot be written. The Engines-side rejection is
+  // exercised instead by calling the client directly with a level that
+  // Workers' own parseTask would already have refused.
+  test("reports INVALID_REASONING_LEVEL when Engines is given a level it does not know", async () => {
+    const result = await resolveHeadlessCommand({
+      enginesBin,
+      agentId: "claude-code",
+      executable: "/bin/claude",
+      prompt: "hello",
+      reasoningLevel: "banana" as ReasoningLevel,
+    });
+
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.code).toBe("REASONING_LEVEL_UNSUPPORTED");
+    if (!result.ok) expect(result.code).toBe("INVALID_REASONING_LEVEL");
   });
 
   test("resolves successfully for a prompt far larger than the OS ARG_MAX, since the prompt is never passed as a CLI arg", async () => {

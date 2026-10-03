@@ -1,4 +1,12 @@
-export type ReasoningLevel = "low" | "medium" | "high";
+/**
+ * The five reasoning levels that Engines knows. Workers only checks that the
+ * text is on this list; whether a given agent accepts a given level is decided
+ * by Engines (`INVALID_REASONING_LEVEL`), never by Workers.
+ */
+export const REASONING_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/** One of the {@link REASONING_LEVELS}. */
+export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
 export interface TaskSpec {
   id: string;
@@ -112,6 +120,11 @@ export function parseRunInput(raw: string): RunInput {
   return { enginesBin: obj.enginesBin, maxOutputBytes, tasks };
 }
 
+/**
+ * Validates one entry of `tasks` and copies the fields Workers knows about.
+ * Throws {@link InvalidInputError} naming `tasks[index]` when a field has the
+ * wrong shape; the whole batch then fails before any task runs.
+ */
 function parseTask(raw: unknown, index: number): TaskSpec {
   if (typeof raw !== "object" || raw === null) {
     throw new InvalidInputError(`tasks[${index}] must be an object`);
@@ -131,9 +144,9 @@ function parseTask(raw: unknown, index: number): TaskSpec {
 
   let reasoningLevel: ReasoningLevel | null = null;
   if (t.reasoningLevel !== undefined && t.reasoningLevel !== null) {
-    if (!["low", "medium", "high"].includes(t.reasoningLevel as string)) {
+    if (!(REASONING_LEVELS as readonly unknown[]).includes(t.reasoningLevel)) {
       throw new InvalidInputError(
-        `tasks[${index}].reasoningLevel must be one of "low", "medium", "high"`
+        `tasks[${index}].reasoningLevel must be one of ${REASONING_LEVELS.map((l) => `"${l}"`).join(", ")}`
       );
     }
     reasoningLevel = t.reasoningLevel as ReasoningLevel;

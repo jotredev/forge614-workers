@@ -8,7 +8,7 @@
 | `timeout` | Vence el timeout | No |
 | `engine_unsupported` | Engines devuelve `HEADLESS_UNSUPPORTED` o `REASONING_LEVEL_UNSUPPORTED` | No |
 | `spawn_error` | El sistema no puede lanzar el ejecutable | No |
-| `generic_error` | Cualquier otro rechazo, salida no cero o excepción de tarea | No |
+| `generic_error` | Cualquier otro rechazo (incluidos `INVALID_REASONING_LEVEL` y `UNKNOWN_AGENT`), salida no cero o excepción de tarea | No |
 
 Un proceso con exit code 0 nunca es cuota agotada aunque su texto mencione límites. Si hay cuota, no se inician tareas posteriores y se emite `run_completed`.
 
@@ -21,4 +21,4 @@ Un proceso con exit code 0 nunca es cuota agotada aunque su texto mencione lími
 
 ## Diagnóstico
 
-Conservar `stderr` y los tamaños reales. En rechazos genéricos de Engines, el código original queda en `stderr` del evento de tarea. No convertir errores en reintentos automáticos: Atlas decide cómo reanudar.
+Conservar `stderr` y los tamaños reales. En rechazos genéricos de Engines, el código original queda en `stderr` del evento de tarea. `INVALID_REASONING_LEVEL` y `UNKNOWN_AGENT` son errores de entrada (la tarea nombró algo que no existe), no una falta de capacidad del motor, por eso no son `engine_unsupported`. No convertir errores en reintentos automáticos: Atlas decide cómo reanudar.

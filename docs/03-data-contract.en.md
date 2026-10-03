@@ -8,7 +8,7 @@ Workers receives one JSON document on stdin:
 {"enginesBin":"/path/to/forge614-engines","maxOutputBytes":10485760,"tasks":[{"id":"task-1","agentId":"claude-code","executable":"/usr/local/bin/claude","prompt":"...","model":"claude-haiku-4-5","reasoningLevel":null,"timeoutMs":600000}]}
 ```
 
-`enginesBin` is required. `maxOutputBytes` defaults to 10 MiB and applies independently to stdout and stderr for each task. `id` is opaque and owned by Atlas. `model`, `reasoningLevel`, and `timeoutMs` are optional; the default timeout is 10 minutes. Valid levels are `low`, `medium`, and `high`.
+`enginesBin` is required. `maxOutputBytes` defaults to 10 MiB and applies independently to stdout and stderr for each task. `id` is opaque and owned by Atlas. `model`, `reasoningLevel`, and `timeoutMs` are optional; the default timeout is 10 minutes. The levels Workers accepts are the five Engines knows: `low`, `medium`, `high`, `xhigh`, and `max`; any other text fails the whole batch with `fatal_error` (`invalid_input`). Workers does not decide which level each agent admits: Engines validates it, and a level the agent does not accept comes back as `INVALID_REASONING_LEVEL` (see `05`).
 
 ## Events
 
