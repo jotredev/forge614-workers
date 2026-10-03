@@ -130,7 +130,7 @@ describe("runBatch", () => {
       resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
         ok: false,
         code: "REASONING_LEVEL_UNSUPPORTED",
-        message: "claude-code does not support reasoning levels",
+        message: "this agent cannot take a reasoning level",
       }),
       runProcess: async (): Promise<RunProcessResult> => {
         runProcessCalled = true;
@@ -177,6 +177,42 @@ describe("runBatch", () => {
       expect(failedEvent.stderr).toContain("ENGINES_RESPONSE_INVALID");
     }
   });
+
+  test.each([
+    ["INVALID_REASONING_LEVEL", 'reasoning level "banana" is not valid for claude-code'],
+    ["UNKNOWN_AGENT", "no agent named not-a-real-agent"],
+  ])(
+    "marks a task as generic_error (an input error, not a capability gap) when Engines rejects it with %s, keeping the code in stderr",
+    async (code, message) => {
+      const events: TaskEvent[] = [];
+      let runProcessCalled = false;
+      const deps = {
+        resolveHeadlessCommand: async (): Promise<ResolveHeadlessResult> => ({
+          ok: false,
+          code,
+          message,
+        }),
+        runProcess: async (): Promise<RunProcessResult> => {
+          runProcessCalled = true;
+          throw new Error("should not be called");
+        },
+      };
+
+      await runBatch(
+        { enginesBin: "/bin/engines", maxOutputBytes: 1024, tasks: [makeTask()] },
+        (e) => events.push(e),
+        deps
+      );
+
+      expect(runProcessCalled).toBe(false);
+      const failedEvent = events.find((e) => e.event === "task_failed");
+      expect(failedEvent).toMatchObject({
+        reason: "generic_error",
+        exitCode: null,
+        stderr: `${code}: ${message}`,
+      });
+    }
+  );
 
   test("marks a task as spawn_error and continues with the next task", async () => {
     const events: TaskEvent[] = [];

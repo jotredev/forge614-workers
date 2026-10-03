@@ -61,13 +61,16 @@ export async function runBatch(
       if (!resolved.ok) {
         failed++;
         // engine_unsupported is reserved specifically for the codes that
-        // mean "this engine/model/reasoning-level combination is not
-        // supported". Any other code (e.g. ENGINES_RESPONSE_INVALID from a
-        // malformed/crashed Engines response, or an unrecognized code like
-        // UNKNOWN_AGENT) is a different kind of failure and must not be
-        // mislabeled as unsupported, since a caller may permanently avoid a
-        // valid combination based on that label. The code is preserved in
-        // `stderr` either way so it isn't lost for diagnostics.
+        // mean "this agent cannot do what was asked": HEADLESS_UNSUPPORTED
+        // and REASONING_LEVEL_UNSUPPORTED. Any other code is a different
+        // kind of failure and must not be mislabeled as unsupported, since a
+        // caller may permanently avoid a valid combination based on that
+        // label. That includes ENGINES_RESPONSE_INVALID (a malformed or
+        // crashed Engines response) and the two input errors
+        // INVALID_REASONING_LEVEL and UNKNOWN_AGENT: the task named
+        // something that does not exist, which is not a capability gap. All
+        // of them go to generic_error, and the code is preserved in `stderr`
+        // so it isn't lost for diagnostics.
         const reason =
           resolved.code === "HEADLESS_UNSUPPORTED" || resolved.code === "REASONING_LEVEL_UNSUPPORTED"
             ? "engine_unsupported"

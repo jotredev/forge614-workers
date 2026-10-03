@@ -11,7 +11,7 @@ describe("adapter registry", () => {
   });
 
   test("returns undefined for an unregistered agent", () => {
-    expect(getAdapter("cursor")).toBeUndefined();
+    expect(getAdapter("not-a-real-agent")).toBeUndefined();
   });
 
   test("lists all registered adapter ids", () => {
