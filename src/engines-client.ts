@@ -6,12 +6,15 @@ export interface HeadlessCommand {
   stdin?: boolean;
 }
 
+/** What Workers asks Engines' `headless` command to build. */
 export interface ResolveHeadlessOptions {
   enginesBin: string;
   agentId: string;
   executable: string;
   prompt: string;
   readableDir?: string;
+  /** When `true`, `--read-only` is added so Engines builds the read-only lock. */
+  readOnly?: boolean;
   model?: string;
   reasoningLevel?: ReasoningLevel | null;
 }
@@ -20,6 +23,13 @@ export type ResolveHeadlessResult =
   | { ok: true; command: HeadlessCommand }
   | { ok: false; code: string; message: string };
 
+/**
+ * Asks Engines for the command that runs one task headlessly (`headless`).
+ * Never throws for an answer Engines gave: a rejection comes back as
+ * `{ ok: false, code, message }` with Engines' own code
+ * (e.g. `UNKNOWN_AGENT`, `INVALID_REASONING_LEVEL`, `READ_ONLY_UNSUPPORTED`),
+ * and an unreadable answer as `ENGINES_RESPONSE_INVALID`.
+ */
 export async function resolveHeadlessCommand(
   options: ResolveHeadlessOptions
 ): Promise<ResolveHeadlessResult> {
@@ -41,6 +51,7 @@ export async function resolveHeadlessCommand(
   if (options.model) args.push("--model", options.model);
   if (options.reasoningLevel) args.push("--reasoning-level", options.reasoningLevel);
   if (options.readableDir) args.push("--readable-dir", options.readableDir);
+  if (options.readOnly) args.push("--read-only");
 
   // stderr is ignored (not piped) so a chatty child process can never fill the
   // OS pipe buffer and deadlock while we're only awaiting stdout/exited.
@@ -77,3 +88,35 @@ export async function resolveHeadlessCommand(
 }
 
 export type ResolveHeadlessCommand = typeof resolveHeadlessCommand;
+
+/**
+ * Asks Engines (`capabilities --agent <id>`) whether it guarantees the
+ * read-only lock for this agent: resolves `true` only when the answer is JSON
+ * with `supportsReadOnly === true`. Every other outcome resolves `false`
+ * instead of throwing: the field missing (an Engines older than 1.17.0, which
+ * would also ignore `--read-only` without an error), `false`, an Engines error
+ * such as an unknown agent, output that is not JSON, or a binary that cannot
+ * be launched. A lock that cannot be confirmed counts as not guaranteed.
+ */
+export async function engineSupportsReadOnly(enginesBin: string, agentId: string): Promise<boolean> {
+  try {
+    // stderr is ignored for the same reason as in resolveHeadlessCommand.
+    const proc = Bun.spawn([enginesBin, "capabilities", "--agent", agentId], {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const stdout = await new Response(proc.stdout).text();
+    await proc.exited;
+    const candidate = JSON.parse(stdout) as unknown;
+    return (
+      typeof candidate === "object" &&
+      candidate !== null &&
+      (candidate as { supportsReadOnly?: unknown }).supportsReadOnly === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Shape of {@link engineSupportsReadOnly}, so the runner can take a double in tests. */
+export type EngineSupportsReadOnly = typeof engineSupportsReadOnly;

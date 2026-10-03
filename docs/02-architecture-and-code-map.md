@@ -9,7 +9,7 @@ El sistema tiene un coordinador, un traductor, un lanzador y detectores especial
 | Componente | Fuente | Función |
 |---|---|---|
 | Runner | `src/runner.ts` | Bucle secuencial, continuidad tras fallos, pausa por cuota y `run_completed`. |
-| Engines client | `src/engines-client.ts` | Invoca `forge614-engines headless` con `--stdin-prompt` y traduce errores conocidos. |
+| Engines client | `src/engines-client.ts` | Invoca `forge614-engines headless` con `--stdin-prompt`, traduce errores conocidos y pregunta `capabilities` por `supportsReadOnly`. |
 | Process runner | `src/process-runner.ts` | `spawn`, `cwd` temporal, stdin, timeout, captura y limpieza. |
 | Adapters | `src/adapters/*.ts` | Patrones de cuota y argumentos extra por motor. |
 | Types | `src/types.ts` | Validación de entrada y tipos de eventos. |

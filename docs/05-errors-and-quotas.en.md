@@ -6,7 +6,7 @@
 |---|---|---|
 | `quota_exhausted` | Non-zero exit and adapter detects a quota/session pattern | Yes |
 | `timeout` | Timeout expires | No |
-| `engine_unsupported` | Engines returns `HEADLESS_UNSUPPORTED` or `REASONING_LEVEL_UNSUPPORTED` | No |
+| `engine_unsupported` | Engines returns `HEADLESS_UNSUPPORTED`, `REASONING_LEVEL_UNSUPPORTED`, or `READ_ONLY_UNSUPPORTED`, or a `readOnly` task cannot confirm the lock (`stderr`: `READ_ONLY_UNSUPPORTED: <message>`, no command runs) | No |
 | `spawn_error` | OS cannot launch the executable | No |
 | `generic_error` | Any other rejection (including `INVALID_REASONING_LEVEL` and `UNKNOWN_AGENT`), non-zero exit, or task exception | No |
 

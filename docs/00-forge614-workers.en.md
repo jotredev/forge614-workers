@@ -21,7 +21,7 @@ Output is one NDJSON event per line on `stdout`. `run_completed` is the final li
 ## Boundaries
 
 - Does not choose tasks, order, engine, or model.
-- Does not preflight capabilities.
+- Does not preflight capabilities, except to confirm the read-only lock when a task asks for `readOnly`.
 - Does not retry or repair parameters.
 - Does not interpret successful responses or report tokens.
 - Does not persist sessions or progress.

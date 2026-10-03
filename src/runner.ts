@@ -1,7 +1,12 @@
 import type { TaskSpec, TaskEvent } from "./types";
 import { getAdapter } from "./adapters/registry";
 import { QUOTA_STDOUT_PREFIX_BYTES } from "./adapters/contract";
-import { resolveHeadlessCommand, type ResolveHeadlessCommand } from "./engines-client";
+import {
+  resolveHeadlessCommand,
+  engineSupportsReadOnly,
+  type ResolveHeadlessCommand,
+  type EngineSupportsReadOnly,
+} from "./engines-client";
 import { runProcess, type RunProcess } from "./process-runner";
 
 export interface RunBatchOptions {
@@ -10,17 +15,37 @@ export interface RunBatchOptions {
   tasks: TaskSpec[];
 }
 
+/** The outside world `runBatch` talks to; tests replace these with doubles. */
 export interface RunBatchDeps {
   resolveHeadlessCommand: ResolveHeadlessCommand;
   runProcess: RunProcess;
+  /**
+   * Confirms with Engines that the read-only lock is guaranteed for an agent.
+   * Only consulted for tasks that set `readOnly`. Optional so a caller that
+   * never runs read-only tasks does not have to provide it; when absent the
+   * real {@link engineSupportsReadOnly} is used.
+   */
+  checkReadOnlySupport?: EngineSupportsReadOnly;
 }
 
+/** What `runBatch` reports back besides the events it emits. */
 export interface RunBatchResult {
   pausedByQuota: boolean;
 }
 
-const defaultDeps: RunBatchDeps = { resolveHeadlessCommand, runProcess };
+const defaultDeps: RunBatchDeps = {
+  resolveHeadlessCommand,
+  runProcess,
+  checkReadOnlySupport: engineSupportsReadOnly,
+};
 
+/**
+ * Runs the tasks of a batch one after another and reports each outcome through
+ * `onEvent`, always ending with `run_completed`. A task that sets `readOnly`
+ * only runs after Engines has confirmed the lock for its agent (asked once per
+ * agent per batch); otherwise it fails as `engine_unsupported` with
+ * `READ_ONLY_UNSUPPORTED` and no command is requested or launched.
+ */
 export async function runBatch(
   options: RunBatchOptions,
   onEvent: (event: TaskEvent) => void,
@@ -31,6 +56,23 @@ export async function runBatch(
   let failed = 0;
   let pausedByQuota = false;
   let tasksRun = 0;
+
+  // One answer per agent for this batch, refusals included, so Engines is
+  // asked once however many read-only tasks the agent has.
+  const readOnlyGuaranteed = new Map<string, boolean>();
+  const checkReadOnlySupport = deps.checkReadOnlySupport ?? engineSupportsReadOnly;
+  async function isReadOnlyGuaranteed(agentId: string): Promise<boolean> {
+    const known = readOnlyGuaranteed.get(agentId);
+    if (known !== undefined) return known;
+    let guaranteed: boolean;
+    try {
+      guaranteed = (await checkReadOnlySupport(options.enginesBin, agentId)) === true;
+    } catch {
+      guaranteed = false;
+    }
+    readOnlyGuaranteed.set(agentId, guaranteed);
+    return guaranteed;
+  }
 
   for (const task of options.tasks) {
     tasksRun++;
@@ -48,12 +90,36 @@ export async function runBatch(
     // out of runBatch and silently skipping the run_completed event that
     // callers rely on as the always-emitted final line.
     try {
+      // The lock is confirmed BEFORE any command is requested: an Engines
+      // that predates `--read-only` would ignore it without an error and the
+      // helper would run with full access.
+      if (task.readOnly && !(await isReadOnlyGuaranteed(task.agentId))) {
+        failed++;
+        const refusal =
+          `READ_ONLY_UNSUPPORTED: Engines does not guarantee read-only execution ` +
+          `for agent "${task.agentId}"; the task was not run`;
+        onEvent({
+          event: "task_failed",
+          taskId: task.id,
+          reason: "engine_unsupported",
+          exitCode: null,
+          stdout: "",
+          stdoutBytes: 0,
+          stdoutTruncated: false,
+          stderr: refusal,
+          stderrBytes: Buffer.byteLength(refusal, "utf8"),
+          stderrTruncated: false,
+        });
+        continue;
+      }
+
       const resolved = await deps.resolveHeadlessCommand({
         enginesBin: options.enginesBin,
         agentId: task.agentId,
         executable: task.executable,
         prompt: task.prompt,
         readableDir: task.readableDir,
+        readOnly: task.readOnly,
         model: task.model,
         reasoningLevel: task.reasoningLevel,
       });
@@ -61,8 +127,8 @@ export async function runBatch(
       if (!resolved.ok) {
         failed++;
         // engine_unsupported is reserved specifically for the codes that
-        // mean "this agent cannot do what was asked": HEADLESS_UNSUPPORTED
-        // and REASONING_LEVEL_UNSUPPORTED. Any other code is a different
+        // mean "this agent cannot do what was asked": HEADLESS_UNSUPPORTED,
+        // REASONING_LEVEL_UNSUPPORTED and READ_ONLY_UNSUPPORTED. Any other code is a different
         // kind of failure and must not be mislabeled as unsupported, since a
         // caller may permanently avoid a valid combination based on that
         // label. That includes ENGINES_RESPONSE_INVALID (a malformed or
@@ -72,7 +138,9 @@ export async function runBatch(
         // of them go to generic_error, and the code is preserved in `stderr`
         // so it isn't lost for diagnostics.
         const reason =
-          resolved.code === "HEADLESS_UNSUPPORTED" || resolved.code === "REASONING_LEVEL_UNSUPPORTED"
+          resolved.code === "HEADLESS_UNSUPPORTED" ||
+          resolved.code === "REASONING_LEVEL_UNSUPPORTED" ||
+          resolved.code === "READ_ONLY_UNSUPPORTED"
             ? "engine_unsupported"
             : "generic_error";
         const stderrMessage = `${resolved.code}: ${resolved.message}`;

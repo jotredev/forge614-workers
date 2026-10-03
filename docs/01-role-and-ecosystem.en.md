@@ -28,4 +28,4 @@ Atlas owns planning and correlates `task.id` with Engram sessions. Engines detec
 
 ## Non-goals
 
-Workers does not preflight compatibility, query `capabilities`, retry, repair model or reasoning parameters, interpret content, measure tokens, or persist state.
+Workers does not preflight compatibility, query `capabilities` (except `supportsReadOnly`, to refuse a `readOnly` task whose lock Engines does not guarantee), retry, repair model or reasoning parameters, interpret content, measure tokens, or persist state.

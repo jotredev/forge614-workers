@@ -28,4 +28,4 @@ Atlas decide el plan y correlaciona `task.id` con sus sesiones de Engram. Engine
 
 ## No objetivos
 
-Workers no valida previamente compatibilidad, no consulta `capabilities`, no reintenta, no corrige modelos o razonamiento, no interpreta contenido, no mide tokens y no persiste estado.
+Workers no valida previamente compatibilidad, no consulta `capabilities` (salvo `supportsReadOnly`, para negarse a correr una tarea `readOnly` cuyo candado Engines no garantiza), no reintenta, no corrige modelos o razonamiento, no interpreta contenido, no mide tokens y no persiste estado.

@@ -21,7 +21,7 @@ Salida: un evento NDJSON por línea en `stdout`. `run_completed` es la última l
 ## Límites
 
 - No elige tareas, orden, motor ni modelo.
-- No consulta capacidades para validar antes de intentar.
+- No consulta capacidades para validar antes de intentar, salvo para confirmar el candado de solo lectura cuando una tarea pide `readOnly`.
 - No reintenta ni corrige parámetros.
 - No interpreta respuestas exitosas ni reporta tokens.
 - No persiste sesiones ni progreso.
