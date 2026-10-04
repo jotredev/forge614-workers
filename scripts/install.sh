@@ -4,12 +4,12 @@ set -euo pipefail
 usage() {
   printf '%s\n' \
     'Install a verified Forge614 Workers release binary.' \
-    'Usage: bash scripts/install.sh [--version TAG] [--force]' \
+    'Usage: bash scripts/install.sh [--version TAG] [--force]   (TAG is a release tag such as v1.0.0)' \
     'Destination: $FORGE614_HOME (default $HOME/.forge614)/workers/<version>/forge614-workers,' \
     'with the active version linked at workers/bin/forge614-workers.' \
     '--force reinstalls the same version or replaces a command that is not a link.' \
-    'Requires Forge614 Engines 1.17.0 or newer; it is installed first when missing or too old.' \
-    'Nothing is installed when a requirement cannot be met.'
+    'Requires Forge614 Engines 1.17.0 or newer with the read-only lock (supportsReadOnly); it is installed first when missing or not compatible.' \
+    'Nothing of Workers is installed when a requirement cannot be met.'
 }
 
 fail() { printf '%s\n' "$1" >&2; exit 1; }
@@ -67,11 +67,11 @@ ensure_engines() {
   printf '%s\n' 'Forge614 Engines 1.17.0 or newer is required; installing the latest release.'
   installer="$download_dir/forge614-engines-install.sh"
   curl --fail --location --proto "$engines_proto" --tlsv1.2 --silent --show-error "$installer_url" --output "$installer" \
-    || fail "Could not download the Forge614 Engines installer. $engines_hint. Forge614 Workers was not installed."
+    || fail "Could not download the Forge614 Engines installer. Forge614 Workers was not installed. $engines_hint"
   FORGE614_HOME="$forge_home" bash "$installer" < /dev/null \
-    || fail "Forge614 Engines could not be installed. $engines_hint. Forge614 Workers was not installed."
+    || fail "Forge614 Engines could not be installed. Forge614 Workers was not installed. $engines_hint"
   engines_is_compatible \
-    || fail "Forge614 Engines is still missing or older than 1.17.0, or does not guarantee the read-only lock. $engines_hint. Forge614 Workers was not installed."
+    || fail "Forge614 Engines is still missing or older than 1.17.0, or does not guarantee the read-only lock. Forge614 Workers was not installed. $engines_hint"
 }
 
 # Refuses a destination that cannot be used safely; run before and after Engines is ensured.

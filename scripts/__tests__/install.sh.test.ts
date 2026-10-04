@@ -104,12 +104,14 @@ interface RunOptions {
   enginesInstaller?: string;
   shell?: string;
   includeTestSentinel?: boolean;
+  forgeHome?: string;
 }
 
-/** Runs the installer with a sandboxed environment (temporary HOME, no FORGE614_HOME, test endpoints). */
+/** Runs the installer with a sandboxed environment (temporary HOME, FORGE614_HOME only when `forgeHome` is given, test endpoints). */
 async function runInstaller(args: string[], options: RunOptions): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const env: Record<string, string | undefined> = { ...process.env, HOME: options.home, SHELL: options.shell ?? "/bin/zsh" };
   delete env.FORGE614_HOME;
+  if (options.forgeHome !== undefined) env.FORGE614_HOME = options.forgeHome;
   delete env[enginesInstallerTestUrl];
   env[testReleaseBaseUrl] = options.releaseBaseUrl;
   if (options.includeTestSentinel === false) delete env[testMode];
@@ -451,6 +453,45 @@ test("rejects a non-file Engines installer override", async () => {
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("must be a local file URL");
     expect(existsSync(join(forge, "workers"))).toBe(false);
+  } finally {
+    server.stop(true);
+  }
+});
+
+/** An absolute FORGE614_HOME moves the whole installation there and leaves `<home>/.forge614` alone. */
+test("honours an absolute FORGE614_HOME instead of the default folder", async () => {
+  const { root, home, forge, server, base } = sandbox();
+  const forgeHome = join(root, "custom-forge-home");
+  const enginesPath = join(forgeHome, "engines", "bin", "forge614-engines");
+  mkdirSync(dirname(enginesPath), { recursive: true });
+  writeFileSync(enginesPath, fakeEnginesScript(compatibleEngines));
+  chmodSync(enginesPath, 0o755);
+  try {
+    const result = await runInstaller([], { home, releaseBaseUrl: base, forgeHome });
+    const command = join(forgeHome, "workers", releaseVersion, "forge614-workers");
+    const link = join(forgeHome, "workers", "bin", "forge614-workers");
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(readFileSync(command, "utf8")).toBe(fixtureBytes);
+    expect(readlinkSync(link)).toBe(command);
+    expect(existsSync(forge)).toBe(false);
+  } finally {
+    server.stop(true);
+  }
+});
+
+/** A relative FORGE614_HOME is refused before anything is downloaded or created. */
+test("rejects a relative FORGE614_HOME and creates nothing", async () => {
+  const { home, forge, server, base } = sandbox();
+  const relativeHome = "relative-forge614-home-for-test";
+  try {
+    const result = await runInstaller([], { home, releaseBaseUrl: base, forgeHome: relativeHome });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("FORGE614_HOME must be an absolute path.");
+    expect(existsSync(forge)).toBe(false);
+    expect(existsSync(resolve(relativeHome))).toBe(false);
+    expect(readdirSync(home)).toEqual([]);
   } finally {
     server.stop(true);
   }

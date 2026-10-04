@@ -19,13 +19,21 @@ macOS / Linux:
 curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash
 ```
 
-Requirements: Bash, `curl`, and a SHA-256 utility (`shasum` or `sha256sum`). It also needs Forge614 Engines 1.17.0 or newer: if it is missing or older, the installer installs the latest one before touching anything of Workers. If a requirement cannot be met, it installs nothing and explains how to meet it.
+To install a specific version: `curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash -s -- --version v1.0.0`.
+
+Requirements: Bash, `curl`, and a SHA-256 utility (`shasum` or `sha256sum`). It also needs Forge614 Engines 1.17.0 or newer that guarantees the read-only lock (`supportsReadOnly`): if it is missing or does not qualify, the installer installs the latest Engines before touching anything of Workers (which also needs `tar` and `node` or `python3`). If Engines still does not qualify, it installs nothing of Workers and explains how to meet it.
 
 The binary is placed at `~/.forge614/workers/<version>/forge614-workers` and the active link at `~/.forge614/workers/bin/forge614-workers`. Workers is an internal dependency and is not added to PATH: other Forge614 products call it directly by that path.
+
+If you set `FORGE614_HOME` (an absolute path), the installer and `update` use that folder instead of `~/.forge614`; Atlas does not read it and always looks in `~/.forge614`.
 
 To verify: `~/.forge614/workers/bin/forge614-workers --version`.
 
 To update: `~/.forge614/workers/bin/forge614-workers update` (it downloads the installer of the latest version and runs it with `--force`).
+
+To restore Engines if it was removed, use `--force` or `update`.
+
+There is no uninstall command yet: remove the `~/.forge614/workers` folder, which does not affect other products.
 
 ## Input, output and exit codes
 | What | Detail |
@@ -37,7 +45,7 @@ To update: `~/.forge614/workers/bin/forge614-workers update` (it downloads the i
 | `2` | Invalid input, or `enginesBin` missing or not executable; no task ran |
 | `1` | Unexpected error that may have happened after partial progress |
 
-`--version` and `--help` answer without waiting for `stdin`. The full contract is in [the data contract](docs/03-data-contract.en.md).
+`--version`, `--help` and `update` answer without waiting for `stdin`. The full contract is in [the data contract](docs/03-data-contract.en.md).
 
 ## Documentation
 | # | Español | English |
@@ -55,6 +63,8 @@ To update: `~/.forge614/workers/bin/forge614-workers update` (it downloads the i
 Also: the [runbook for adding an adapter](docs/adding-a-new-engine-adapter.md) and the [local ↔ Notion map](docs/notion-map.json).
 
 ## Development
+Requires Bun (CI uses 1.4.2).
+
 ```bash
 bun test
 bun run typecheck

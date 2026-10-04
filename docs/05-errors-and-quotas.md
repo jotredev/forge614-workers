@@ -18,6 +18,7 @@ Un proceso con exit code 0 nunca es cuota agotada aunque su texto mencione lími
 - `75`: pausa por cuota agotada.
 - `2`: entrada inválida (JSON roto, `readOnly` que no sea `true`/`false`, `reasoningLevel` fuera de `low`/`medium`/`high`/`xhigh`/`max`, etc.) o `enginesBin` inexistente/no ejecutable; ninguna tarea corrió.
 - `1`: `fatal_error` inesperado que pudo ocurrir después de progreso parcial.
+- La orden `update` reutiliza estos códigos con su propio sentido: `0` actualizado o ya al día, `2` si recibe argumentos y `1` si fallan la descarga, el instalador o la lectura de la versión instalada (ver `06`).
 
 ## Diagnóstico
 

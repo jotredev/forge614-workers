@@ -4,6 +4,7 @@
 
 - `README.md` and `README.en.md`: project entry point (what it is, installation, input/output and documentation) in Spanish and English.
 - `package.json`: version `1.0.0`, test/typecheck/build scripts, and dependencies.
+- `tsconfig.json`: strict typing of `src`, `test` and `scripts`.
 - `CHANGELOG.md`: version history (one `## <version>` entry per release).
 - `LICENSE` and `SECURITY.md`: license and security policy.
 - `scripts/install.sh`: verified installer (sha256, compatible Engines, version folder and active link).
@@ -36,3 +37,4 @@
 
 - `docs/adding-a-new-engine-adapter.md`: complete operational procedure.
 - `docs/00`–`docs/08`: reviewed bilingual and navigable source set.
+- `docs/notion-map.json`: local ↔ Notion map with the sha256 fingerprint of each manual.

@@ -4,6 +4,7 @@
 
 - `README.md` y `README.en.md`: entrada del proyecto (qué es, instalación, entrada/salida y documentación) en español e inglés.
 - `package.json`: versión `1.0.0`, scripts de test/typecheck/build y dependencias.
+- `tsconfig.json`: tipado estricto de `src`, `test` y `scripts`.
 - `CHANGELOG.md`: historial de versiones (una entrada `## <versión>` por release).
 - `LICENSE` y `SECURITY.md`: licencia y política de seguridad.
 - `scripts/install.sh`: instalador verificado (sha256, Engines compatible, carpeta por versión y enlace activo).
@@ -36,3 +37,4 @@ Los tests `src/**/*.test.ts` cubren tipos, adapters, registro, Engines client, r
 
 - `docs/adding-a-new-engine-adapter.md`: procedimiento operativo completo.
 - `docs/00`–`docs/08`: fuente revisada bilingüe y navegable.
+- `docs/notion-map.json`: mapa local ↔ Notion con la huella sha256 de cada manual.
