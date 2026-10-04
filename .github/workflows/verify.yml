@@ -1,0 +1,54 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  unix:
+    name: Unix checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Install Forge614 Engines (pinned; the tests use the real binary)
+        shell: bash
+        env:
+          ENGINES_VERSION: "1.17.0"
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64)   combo=linux-x64 ;;
+            Linux-ARM64) combo=linux-arm64 ;;
+            macOS-ARM64) combo=darwin-arm64 ;;
+            macOS-X64)   combo=darwin-x64 ;;
+            *) echo "Unsupported runner: $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          name="forge614-engines-${ENGINES_VERSION}-${combo}"
+          base="https://github.com/jotredev/forge614-engines/releases/download/v${ENGINES_VERSION}"
+          dir="$RUNNER_TEMP/engines"
+          mkdir -p "$dir"
+          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz" "$base/$name.tar.gz"
+          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz.sha256" "$base/$name.tar.gz.sha256"
+          (cd "$dir" && shasum -a 256 -c "$name.tar.gz.sha256")
+          tar -xzf "$dir/$name.tar.gz" -C "$dir"
+          bin="$dir/$name/forge614-engines"
+          test -x "$bin"
+          # A wrong or too-old Engines must fail here with a clear message, not as 14 confusing test failures.
+          "$bin" capabilities --agent claude-code | grep -Eq '"supportsReadOnly": *true' \
+            || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
+          echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
+      - run: bun test
+      - run: bun run typecheck
+      - run: git diff --check
