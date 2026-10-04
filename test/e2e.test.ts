@@ -1,4 +1,6 @@
 import { describe, test, expect } from "bun:test";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json";
 
@@ -73,6 +75,72 @@ describe("forge614-workers --version and --help", () => {
 
     expect(exitCode).toBe(2);
     expect(JSON.parse(stdout.trim())).toMatchObject({ event: "fatal_error", reason: "invalid_input" });
+  });
+});
+
+/**
+ * Runs the real `src/main.ts update` with a fake `fetch` (see `test/support/fake-update-preload.ts`) and
+ * a temporary `FORGE614_HOME` holding a fake installed command, leaving stdin open and unwritten as a
+ * terminal would. A process that waits for stdin is killed after `hangAfterMs` and reported as hung.
+ */
+async function runUpdateWithFakeInstaller(
+  args: string[] = [],
+  hangAfterMs = 5000
+): Promise<{ stdout: string; stderr: string; exitCode: number | null; hung: boolean; calls: string }> {
+  const home = mkdtempSync(join(tmpdir(), "forge614-workers-update-e2e-"));
+  try {
+    const installed = join(home, "workers", "bin", "forge614-workers");
+    mkdirSync(join(home, "workers", "bin"), { recursive: true });
+    writeFileSync(installed, "#!/usr/bin/env bash\necho 'forge614-workers 9.9.9'\n");
+    chmodSync(installed, 0o755);
+    const marker = join(home, "calls.log");
+    writeFileSync(marker, "");
+
+    const proc = Bun.spawn(["bun", "--preload", join(import.meta.dir, "support", "fake-update-preload.ts"), MAIN_ENTRY, "update", ...args], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, FORGE614_HOME: home, FAKE_UPDATE_MARKER: marker },
+    });
+    let hung = false;
+    const timer = setTimeout(() => {
+      hung = true;
+      proc.kill();
+    }, hangAfterMs);
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+    const exitCode = await proc.exited;
+    clearTimeout(timer);
+    return { stdout, stderr, exitCode: hung ? null : exitCode, hung, calls: readFileSync(marker, "utf8") };
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+describe("forge614-workers update", () => {
+  test("is answered without reading stdin: downloads the latest installer and runs it with --force", async () => {
+    const { stdout, exitCode, hung, calls } = await runUpdateWithFakeInstaller();
+
+    expect(hung).toBe(false);
+    expect(exitCode).toBe(0);
+    expect(calls).toContain("fetch https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh");
+    expect(calls).toContain("installer --force");
+    expect(stdout).toBe(`forge614-workers updated from ${pkg.version} to 9.9.9.\n`);
+  });
+
+  test("refuses extra arguments with exit 2 and does not download anything", async () => {
+    const { stderr, exitCode, hung, calls } = await runUpdateWithFakeInstaller(["--force"]);
+
+    expect(hung).toBe(false);
+    expect(exitCode).toBe(2);
+    expect(stderr).toContain("update takes no arguments");
+    expect(calls).toBe("");
+  });
+
+  test("--help names the update command", async () => {
+    const { stdout, exitCode } = await runWorkersWithArgs(["--help"]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("forge614-workers update");
   });
 });
 
