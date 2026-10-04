@@ -18,7 +18,9 @@ cat run.json | forge614-workers
 
 Output is one NDJSON event per line on `stdout`. `run_completed` is the final line of every non-fatal run.
 
-`forge614-workers --version` prints the version and `forge614-workers --help` a short help; neither waits for `stdin`.
+`forge614-workers --version` prints the version, `forge614-workers --help` a short help and `forge614-workers update` updates the installed binary; none of them waits for `stdin`.
+
+Installation (macOS and Linux): `curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash`. The binary ends up at `~/.forge614/workers/bin/forge614-workers`; the steps and requirements are in [06](06-testing-and-operations.en.md) and in the [README](../README.en.md).
 
 ## Boundaries
 
