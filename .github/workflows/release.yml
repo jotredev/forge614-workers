@@ -1,0 +1,218 @@
+name: Release standalone artifacts
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/install.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Release verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Install Forge614 Engines (pinned; the tests use the real binary)
+        shell: bash
+        env:
+          ENGINES_VERSION: "1.17.0"
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64)   combo=linux-x64 ;;
+            Linux-ARM64) combo=linux-arm64 ;;
+            macOS-ARM64) combo=darwin-arm64 ;;
+            macOS-X64)   combo=darwin-x64 ;;
+            *) echo "Unsupported runner: $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          name="forge614-engines-${ENGINES_VERSION}-${combo}"
+          base="https://github.com/jotredev/forge614-engines/releases/download/v${ENGINES_VERSION}"
+          dir="$RUNNER_TEMP/engines"
+          mkdir -p "$dir"
+          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz" "$base/$name.tar.gz"
+          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz.sha256" "$base/$name.tar.gz.sha256"
+          (cd "$dir" && shasum -a 256 -c "$name.tar.gz.sha256")
+          tar -xzf "$dir/$name.tar.gz" -C "$dir"
+          bin="$dir/$name/forge614-engines"
+          test -x "$bin"
+          # A wrong or too-old Engines must fail here with a clear message, not as 14 confusing test failures.
+          capabilities="$("$bin" capabilities --agent claude-code)"
+          grep -Eq '"supportsReadOnly": *true' <<< "$capabilities" \
+            || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
+          echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
+      - run: bun test
+      - run: bun run typecheck
+      - run: git diff --check
+      - run: bash -n scripts/install.sh
+      - name: Verify the CHANGELOG has an entry for the package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(bun -e 'console.log(require("./package.json").version)')"
+          grep -Fxq "## ${package_version}" CHANGELOG.md \
+            || { echo "CHANGELOG.md has no '## ${package_version}' entry for the package.json version" >&2; exit 1; }
+      - name: Verify the release tag matches package.json
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          package_version="v$(bun -e 'console.log(require("./package.json").version)')"
+          if [ "$package_version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version ($package_version)" >&2
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.artifact }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: bun-darwin-arm64
+            artifact: forge614-workers-darwin-arm64
+            bun_version: 1.4.2
+          - runner: macos-15-intel
+            target: bun-darwin-x64
+            artifact: forge614-workers-darwin-x64
+            bun_version: 1.4.2
+          - runner: ubuntu-latest
+            target: bun-linux-x64
+            artifact: forge614-workers-linux-x64
+            bun_version: 1.4.2
+          - runner: ubuntu-24.04-arm
+            target: bun-linux-arm64
+            artifact: forge614-workers-linux-arm64
+            bun_version: 1.4.2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun_version }}
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Create the disposable build directory
+        run: mkdir dist
+      - name: Compile standalone artifact
+        run: bun build ./src/main.ts --compile --target=${{ matrix.target }} --outfile dist/${{ matrix.artifact }}
+      - name: Smoke-test the native standalone artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="forge614-workers $(bun -e 'console.log(require("./package.json").version)')"
+          actual="$(./dist/${{ matrix.artifact }} --version)"
+          [ "$actual" = "$expected" ] || { echo "version mismatch: '$actual' != '$expected'" >&2; exit 1; }
+          # An empty batch against any executable proves stdin parsing and the NDJSON ending work in the compiled binary.
+          out="$(printf '%s' '{"enginesBin":"/bin/sh","tasks":[]}' | ./dist/${{ matrix.artifact }})"
+          case "$out" in *'"event":"run_completed"'*) ;; *) echo "empty batch did not finish: $out" >&2; exit 1 ;; esac
+      - name: Preserve the artifact mode for collection
+        run: tar -C dist -czf dist/${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
+
+  assemble:
+    name: Assemble and validate release assets
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Extract the four standalone artifacts with their original modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for archive in dist/*.tar.gz; do
+            tar -xzf "$archive" -C dist
+          done
+      - name: Generate SHA256SUMS for the four release artifacts
+        shell: bash
+        run: |
+          cd dist
+          sha256sum \
+            forge614-workers-darwin-arm64 \
+            forge614-workers-darwin-x64 \
+            forge614-workers-linux-x64 \
+            forge614-workers-linux-arm64 > SHA256SUMS
+      - name: Validate release artifacts and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          for artifact in forge614-workers-darwin-arm64 forge614-workers-darwin-x64 \
+            forge614-workers-linux-x64 forge614-workers-linux-arm64; do
+            test -s "dist/$artifact" || { echo "missing or empty artifact: $artifact" >&2; exit 1; }
+          done
+          for artifact in forge614-workers-darwin-arm64 forge614-workers-darwin-x64 \
+            forge614-workers-linux-x64 forge614-workers-linux-arm64; do
+            test -x "dist/$artifact" || { echo "artifact is not executable: $artifact" >&2; exit 1; }
+          done
+          test -s dist/SHA256SUMS || { echo "missing or empty SHA256SUMS" >&2; exit 1; }
+          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 4
+          for artifact in forge614-workers-darwin-arm64 forge614-workers-darwin-x64 \
+            forge614-workers-linux-x64 forge614-workers-linux-arm64; do
+            grep -Eq "^[0-9a-f]{64}  ${artifact}$" dist/SHA256SUMS || { echo "invalid checksum entry: $artifact" >&2; exit 1; }
+          done
+          (cd dist && sha256sum --check SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            dist/forge614-workers-darwin-arm64
+            dist/forge614-workers-darwin-x64
+            dist/forge614-workers-linux-x64
+            dist/forge614-workers-linux-arm64
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [verify, assemble]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: dist
+      - name: Create the GitHub Release with the validated files only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          release_flags=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            dist/forge614-workers-darwin-arm64 \
+            dist/forge614-workers-darwin-x64 \
+            dist/forge614-workers-linux-x64 \
+            dist/forge614-workers-linux-arm64 \
+            dist/SHA256SUMS \
+            scripts/install.sh#install.sh \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "${release_flags[@]}"

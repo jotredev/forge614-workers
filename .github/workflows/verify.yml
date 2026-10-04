@@ -46,9 +46,11 @@ jobs:
           bin="$dir/$name/forge614-engines"
           test -x "$bin"
           # A wrong or too-old Engines must fail here with a clear message, not as 14 confusing test failures.
-          "$bin" capabilities --agent claude-code | grep -Eq '"supportsReadOnly": *true' \
+          capabilities="$("$bin" capabilities --agent claude-code)"
+          grep -Eq '"supportsReadOnly": *true' <<< "$capabilities" \
             || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
           echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
       - run: bun test
       - run: bun run typecheck
       - run: git diff --check
+      - run: bash -n scripts/install.sh
