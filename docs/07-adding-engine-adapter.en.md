@@ -8,7 +8,7 @@ The full runbook is [`adding-a-new-engine-adapter.md`](adding-a-new-engine-adapt
 4. In the same step test the CLI in an empty directory with isolated cwd; never assume authentication works by analogy.
 5. Add `extraArgs()` only when the CLI needs a documented flag, such as Codex's `--skip-git-repo-check`.
 6. Register the adapter in `src/adapters/registry.ts`.
-7. Add quota and generic-error tests; run `bun test`.
+7. Add quota and generic-error tests; run `bun test`. In CI, raise the pinned Engines first (see `06`).
 
 The read-only lock needs no change in Workers: Engines' `supportsReadOnly` decides it and, if `false`, the agent's `readOnly` tasks are refused automatically.
 

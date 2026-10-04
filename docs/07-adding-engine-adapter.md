@@ -8,7 +8,7 @@ El runbook completo está en [`adding-a-new-engine-adapter.md`](adding-a-new-eng
 4. En el mismo paso prueba el CLI en un directorio vacío con cwd aislado; nunca supongas que la autenticación funciona por analogía.
 5. Añade `extraArgs()` solo si el CLI necesita una bandera documentada, como Codex y `--skip-git-repo-check`.
 6. Registra el adapter en `src/adapters/registry.ts`.
-7. Añade pruebas de cuota y error genérico; ejecuta `bun test`.
+7. Añade pruebas de cuota y error genérico; ejecuta `bun test`. En la CI, sube antes el Engines fijo (ver `06`).
 
 El candado de solo lectura no requiere cambios en Workers: lo decide `supportsReadOnly` de Engines y, si es `false`, las tareas `readOnly` de ese agente se rechazan solas.
 

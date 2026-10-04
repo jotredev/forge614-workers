@@ -44,7 +44,7 @@ export function installedWorkersCommand(): string {
 /**
  * Runs the installed command with `--version` and checks the shape of its answer.
  * @returns The reported version, for example `1.0.0`.
- * @throws Error when the command does not print `forge614-workers X.Y.Z[...]`.
+ * @throws Error when the command cannot run or does not print `forge614-workers X.Y.Z[...]`.
  */
 function readInstalledVersion(): string {
   const output = execFileSync(installedWorkersCommand(), ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -57,7 +57,7 @@ function readInstalledVersion(): string {
  * Downloads an installer script to a private temporary file marked executable.
  * @param url Where to download the installer from.
  * @returns The path of the downloaded installer and a `cleanup` that removes its temporary folder.
- * @throws Error when the server answers with an HTTP error status.
+ * @throws Error with a clear message when the server answers with an HTTP error status; a network failure rejects with the error of `fetch` itself.
  */
 async function downloadInstaller(url: string): Promise<{ installer: string; cleanup: () => void }> {
   const response = await fetch(url);

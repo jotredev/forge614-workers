@@ -13,7 +13,8 @@ The system has a coordinator, a translator, a launcher, and specialized detector
 | Process runner | `src/process-runner.ts` | `spawn`, temporary `cwd`, stdin, timeout, capture, and cleanup. |
 | Adapters | `src/adapters/*.ts` | Quota patterns and per-engine extra arguments. |
 | Types | `src/types.ts` | Input validation and event types. |
-| CLI/main | `src/cli.ts`, `src/main.ts` | Answers `--version`/`--help`, reads stdin, emits NDJSON, and decides the exit code. |
+| Updater | `src/updater.ts` | `update` command: downloads the `install.sh` of the latest release, runs it with `--force`, reads the installed version and returns the exit code (0; 2 when given arguments; 1 on failure). Download, process and version read are injectable. |
+| CLI/main | `src/cli.ts`, `src/main.ts` | Answers `--version`/`--help`/`update` before reading stdin, reads stdin, emits NDJSON, and decides the exit code. |
 
 ## Per-task sequence
 

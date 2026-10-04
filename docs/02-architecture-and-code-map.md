@@ -13,7 +13,8 @@ El sistema tiene un coordinador, un traductor, un lanzador y detectores especial
 | Process runner | `src/process-runner.ts` | `spawn`, `cwd` temporal, stdin, timeout, captura y limpieza. |
 | Adapters | `src/adapters/*.ts` | Patrones de cuota y argumentos extra por motor. |
 | Types | `src/types.ts` | Validación de entrada y tipos de eventos. |
-| CLI/main | `src/cli.ts`, `src/main.ts` | Atiende `--version`/`--help`, lee stdin, emite NDJSON y determina el exit code. |
+| Updater | `src/updater.ts` | Orden `update`: descarga el `install.sh` de la última release, lo ejecuta con `--force`, lee la versión instalada y devuelve el código de salida (0; 2 si recibe argumentos; 1 si falla). Descarga, proceso y lectura de versión son inyectables. |
+| CLI/main | `src/cli.ts`, `src/main.ts` | Atiende `--version`/`--help`/`update` antes de leer stdin, lee stdin, emite NDJSON y determina el exit code. |
 
 ## Secuencia por tarea
 

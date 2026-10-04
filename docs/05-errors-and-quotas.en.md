@@ -18,6 +18,7 @@ A process with exit code 0 is never quota-exhausted even if its text mentions li
 - `75`: paused because quota was exhausted.
 - `2`: invalid input (broken JSON, a `readOnly` that is not `true`/`false`, a `reasoningLevel` outside `low`/`medium`/`high`/`xhigh`/`max`, etc.) or a missing/non-executable `enginesBin`; no task ran.
 - `1`: unexpected `fatal_error` that may follow partial progress.
+- The `update` command reuses these codes with its own meaning: `0` updated or already up to date, `2` when it receives arguments and `1` when the download, the installer or the read of the installed version fails (see `06`).
 
 ## Diagnosis
 

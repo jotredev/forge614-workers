@@ -19,13 +19,21 @@ macOS / Linux:
 curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash
 ```
 
-Requisitos: Bash, `curl` y una utilidad SHA-256 (`shasum` o `sha256sum`). Además necesita Forge614 Engines 1.17.0 o posterior: si falta o es anterior, el instalador instala la última versión antes de tocar nada de Workers. Si algún requisito no se puede cumplir, no instala nada y explica cómo cumplirlo.
+Para instalar una versión concreta: `curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash -s -- --version v1.0.0`.
+
+Requisitos: Bash, `curl` y una utilidad SHA-256 (`shasum` o `sha256sum`). Además necesita Forge614 Engines 1.17.0 o posterior que garantice el candado de solo lectura (`supportsReadOnly`): si falta o no cumple, el instalador instala la última versión de Engines antes de tocar nada de Workers (para eso necesita también `tar` y `node` o `python3`). Si Engines sigue sin cumplir, no instala nada de Workers y explica cómo cumplirlo.
 
 El binario queda en `~/.forge614/workers/<versión>/forge614-workers` y el enlace activo en `~/.forge614/workers/bin/forge614-workers`. Workers es una dependencia interna y no se agrega al PATH: otros productos de Forge614 lo llaman directamente por esa ruta.
+
+Si defines `FORGE614_HOME` (ruta absoluta), el instalador y `update` usan esa carpeta en lugar de `~/.forge614`; Atlas no la lee y siempre busca en `~/.forge614`.
 
 Para verificar: `~/.forge614/workers/bin/forge614-workers --version`.
 
 Para actualizar: `~/.forge614/workers/bin/forge614-workers update` (descarga el instalador de la última versión y lo ejecuta con `--force`).
+
+Para reponer Engines si se borró, usa `--force` o `update`.
+
+Todavía no hay una orden para desinstalar: se borra la carpeta `~/.forge614/workers`, que no afecta a otros productos.
 
 ## Entrada, salida y códigos de salida
 | Qué | Detalle |
@@ -37,7 +45,7 @@ Para actualizar: `~/.forge614/workers/bin/forge614-workers update` (descarga el 
 | `2` | Entrada inválida o `enginesBin` inexistente o no ejecutable; ninguna tarea corrió |
 | `1` | Error inesperado que pudo ocurrir después de un progreso parcial |
 
-`--version` y `--help` responden sin esperar `stdin`. El contrato completo está en [el contrato de datos](docs/03-data-contract.md).
+`--version`, `--help` y `update` responden sin esperar `stdin`. El contrato completo está en [el contrato de datos](docs/03-data-contract.md).
 
 ## Documentación
 | # | Español | English |
@@ -55,6 +63,8 @@ Para actualizar: `~/.forge614/workers/bin/forge614-workers update` (descarga el 
 Además: el [runbook para agregar un adapter](docs/adding-a-new-engine-adapter.md) y el [mapa local ↔ Notion](docs/notion-map.json).
 
 ## Desarrollo
+Requiere Bun (la CI usa 1.4.2).
+
 ```bash
 bun test
 bun run typecheck

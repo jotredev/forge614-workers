@@ -47,7 +47,7 @@ jobs:
           tar -xzf "$dir/$name.tar.gz" -C "$dir"
           bin="$dir/$name/forge614-engines"
           test -x "$bin"
-          # A wrong or too-old Engines must fail here with a clear message, not as 14 confusing test failures.
+          # A wrong or too-old Engines must fail here with a clear message, not as a pile of confusing test failures.
           capabilities="$("$bin" capabilities --agent claude-code)"
           grep -Eq '"supportsReadOnly": *true' <<< "$capabilities" \
             || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
