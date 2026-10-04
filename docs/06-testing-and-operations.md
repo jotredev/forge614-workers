@@ -14,7 +14,7 @@ bun run build
 
 `bun build --compile` genera `dist/forge614-workers`.
 
-El binario responde `forge614-workers --version` (o `-v`), que imprime `forge614-workers <versión>`, y `--help` (o `-h`), que imprime una ayuda corta; ambos salen con código 0 sin esperar la entrada estándar. Con cualquier otro primer argumento sigue esperando el lote por stdin. La versión se lee de `package.json`, la única fuente.
+El binario responde `forge614-workers --version` (o `-v`), que imprime `forge614-workers <versión>`, y `--help` (o `-h`), que imprime una ayuda corta; ambos salen con código 0 sin esperar la entrada estándar. El binario también responde `forge614-workers update`: descarga el `install.sh` de la última release (`https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh`) y lo corre con `--force`, como hace `forge614-engram update`. Se atiende antes de leer stdin, no acepta argumentos (con alguno sale con 2), imprime una línea con la versión anterior y la nueva (o que ya está al día) y sale con 1 si la descarga o el instalador fallan. Con cualquier otro primer argumento sigue esperando el lote por stdin. La versión se lee de `package.json`, la única fuente.
 
 ## Qué debe cubrirse
 
@@ -27,6 +27,7 @@ El binario responde `forge614-workers --version` (o `-v`), que imprime `forge614
 - Registro completo: todo agente headless de Engines tiene adapter.
 - Candado de solo lectura: una tarea `readOnly` sin candado confirmado no lanza ninguna orden.
 - Validación de `readOnly` (solo `true`/`false`/ausente) y de los cinco niveles de razonamiento.
-- `--version` y `--help` sin leer stdin.
+- `--version`, `--help` y `update` sin leer stdin.
+- `update` con dobles (sin red ni instalador real): descarga fallida con mensaje claro y salida no cero, instalador ejecutado con `--force` y archivo descargado limpiado.
 
 No se deben lanzar CLIs de IA reales en la suite normal.

@@ -1,5 +1,6 @@
 import { runCli } from "./cli";
 import pkg from "../package.json";
+import { runUpdateCommand } from "./updater";
 
 /** Short help printed by `--help`: what Workers is and how it is driven. */
 const HELP = `forge614-workers ${pkg.version}
@@ -16,6 +17,7 @@ guarantee the lock).
 
 Usage:
   forge614-workers < batch.json
+  forge614-workers update      Download the installer of the latest release and run it with --force.
   forge614-workers --version   Print the version and exit (also -v).
   forge614-workers --help      Print this help and exit (also -h).
 `;
@@ -35,10 +37,20 @@ async function readStdin(): Promise<string> {
   return await new Response(Bun.stdin.stream()).text();
 }
 
-const info = infoFor(Bun.argv.slice(2));
+const args = Bun.argv.slice(2);
+const info = infoFor(args);
 if (info !== undefined) {
   process.stdout.write(info);
   process.exit(0);
+}
+
+// Like --version, `update` is answered before stdin is touched: it never waits for a batch.
+if (args[0] === "update") {
+  const exitCode = await runUpdateCommand(args.slice(1), pkg.version, {
+    writeLine: (line) => console.log(line),
+    writeError: (line) => console.error(line),
+  });
+  process.exit(exitCode);
 }
 
 const stdinText = await readStdin();
