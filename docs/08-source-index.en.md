@@ -2,8 +2,12 @@
 
 ## Product and contracts
 
-- `README.md`: project entry point (still minimal).
-- `package.json`: version `0.1.0`, test/typecheck/build scripts, and dependencies.
+- `README.md` and `README.en.md`: project entry point (what it is, installation, input/output and documentation) in Spanish and English.
+- `package.json`: version `1.0.0`, test/typecheck/build scripts, and dependencies.
+- `CHANGELOG.md`: version history (one `## <version>` entry per release).
+- `LICENSE` and `SECURITY.md`: license and security policy.
+- `scripts/install.sh`: verified installer (sha256, compatible Engines, version folder and active link).
+- `.github/workflows/verify.yml` and `.github/workflows/release.yml`: verification on every push and PR, and binary publication.
 - `FORGE614_ECOSYSTEM_CONTRACT.md`: cross-product boundaries and contracts.
 - `.forge614/project.json`: portable Engram identity of the project (project id and the `forge614` group).
 - `docs/superpowers/specs/2026-09-20-forge614-workers-design.md`: approved specification.
@@ -21,11 +25,12 @@
 - `src/adapters/registry.ts`: adapter registry.
 - `src/adapters/_template.ts`: extension template.
 - `src/cli.ts`: input/output boundary and fatal errors.
-- `src/main.ts`: binary entry point; answers `--version`/`--help` before reading stdin and takes the version from `package.json`.
+- `src/updater.ts`: `update` command (downloads the installer of the latest release and runs it with `--force`, with injectable download and process).
+- `src/main.ts`: binary entry point; answers `--version`/`--help`/`update` before reading stdin and takes the version from `package.json`.
 
 ## Tests and fixtures
 
-`src/**/*.test.ts` covers types, adapters, registry, Engines client, runner, process runner, and CLI. `test/e2e.test.ts` wires the full flow with doubles and checks `--version` and `--help`. `test/fixtures/` contains stdin echo, quota, oversized output, SIGTERM-ignoring, cwd/env printing, and fake Engines processes.
+`src/**/*.test.ts` covers types, adapters, registry, Engines client, runner, process runner, and CLI. `src/updater.test.ts` covers `update` with doubles. `scripts/__tests__/install.sh.test.ts` tests the installer with a temporary HOME. `test/versions.test.ts` requires aligned versions. `test/e2e.test.ts` wires the full flow with doubles and checks `--version`, `--help` and `update` (with `test/support/fake-update-preload.ts`). `test/fixtures/` contains stdin echo, quota, oversized output, SIGTERM-ignoring, cwd/env printing, and fake Engines processes.
 
 ## Maintenance documentation
 
