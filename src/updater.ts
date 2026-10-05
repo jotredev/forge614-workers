@@ -1,67 +1,78 @@
 /**
- * Self-update for Forge614 Workers: downloads the installer published with the latest release and runs
- * it with `--force`, then reports which version ended up installed. Every external dependency (the
- * download, the process launch and the read of the installed version) can be replaced by parameter so
- * the flow is testable without network or a real installer. Used by `src/main.ts` for `update`.
+ * Autoactualización de Forge614 Workers: descarga el instalador publicado con la última versión (release), lo
+ * ejecuta con `--force` (reinstala aunque ya esté instalado) y luego informa qué versión quedó instalada.
+ * Cada dependencia externa (la descarga, el lanzamiento del proceso y la lectura de la versión instalada) se
+ * puede reemplazar por parámetro, de modo que el flujo se prueba sin red ni instalador real.
+ * Lo usa `src/main.ts` para el comando `update`; lo prueba `src/updater.test.ts`.
+ * Piezas: `installedWorkersCommand`, `updateInstalledWorkers` y `runUpdateCommand`.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** Installer attached to every Workers release; `latest` always resolves to the newest one. */
+/** Instalador adjunto a cada versión publicada de Workers; `latest` siempre apunta a la más nueva. */
 export const LATEST_INSTALLER_URL = "https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh";
 
-/** Options accepted when launching the installer process. */
+/** Opciones que se aceptan al lanzar el proceso del instalador. */
 type SpawnOptions = { stdio: "inherit" };
-/** Shape of a process launcher; tests replace it with one that runs nothing real. */
+/** Forma de un lanzador de procesos; las pruebas lo reemplazan por uno que no ejecuta nada real. */
 type Spawn = (command: string, args: string[], options?: SpawnOptions) => { status: number | null; error?: Error };
-/** Shape of the installer download; tests replace it with one that never touches the network. */
+/** Forma de la descarga del instalador; las pruebas la reemplazan por una que nunca toca la red. */
 type Download = (url: string) => Promise<{ installer: string; cleanup: () => void }>;
-/** Shape of the read of the installed version; tests replace it with a constant. */
+/** Forma de la lectura de la versión instalada; las pruebas la reemplazan por una constante. */
 type ReadInstalledVersion = () => string;
 
-/** Outcome of an update attempt. */
+/** Resultado de un intento de actualización. */
 export interface UpdateResult {
-  /** Whether the installed version changed. */
+  /** Si la versión instalada cambió. */
   updated: boolean;
-  /** Version that was installed before the attempt. */
+  /** Versión que estaba instalada antes del intento. */
   previousVersion: string;
-  /** Version installed after the attempt (equal to `previousVersion` when nothing changed). */
+  /** Versión instalada después del intento (igual a `previousVersion` cuando nada cambió). */
   installedVersion: string;
 }
 
 /**
- * Gives the path where the installer leaves the active Workers command, honouring `FORGE614_HOME`
- * the same way the installer does.
- * @returns The absolute path of `forge614-workers` under `<home>/workers/bin`.
+ * Da la ruta donde el instalador deja el comando activo de Workers: toma `FORGE614_HOME` si está definida y no
+ * está vacía, y si no usa `.forge614` dentro de la carpeta personal del usuario. A diferencia del instalador
+ * (`scripts/install.sh`), que exige una ruta absoluta en `FORGE614_HOME`, esta función no la valida: una ruta
+ * relativa se usa tal cual.
+ *
+ * @returns La ruta de `forge614-workers` dentro de `<carpeta>/workers/bin`; es absoluta salvo que `FORGE614_HOME` sea relativa.
  */
 export function installedWorkersCommand(): string {
+  // `||` hace que una variable vacía cuente como no definida y se use la carpeta por defecto.
   const forgeHome = process.env.FORGE614_HOME || join(homedir(), ".forge614");
   return join(forgeHome, "workers", "bin", "forge614-workers");
 }
 
 /**
- * Runs the installed command with `--version` and checks the shape of its answer.
- * @returns The reported version, for example `1.0.0`.
- * @throws Error when the command cannot run or does not print `forge614-workers X.Y.Z[...]`.
+ * Ejecuta el comando instalado con `--version` y comprueba la forma de su respuesta.
+ *
+ * @returns La versión informada, por ejemplo `1.0.0`.
+ * @throws Error si el comando no se puede ejecutar o sale con código distinto de cero (lo lanza `execFileSync` (ejecutor síncrono de procesos)), o si no imprime `forge614-workers X.Y.Z[...]` (mensaje «The installed Forge614 Workers did not report a valid version.»).
  */
 function readInstalledVersion(): string {
+  // Se ignora stdin y stderr del comando; solo se lee su stdout, sin espacios sobrantes en los extremos.
   const output = execFileSync(installedWorkersCommand(), ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  // Se exige el texto completo `forge614-workers` + versión de tres números, con un sufijo opcional como `-beta.1`; el grupo entre paréntesis captura solo la versión.
   const match = /^forge614-workers\s+([0-9]+\.[0-9]+\.[0-9]+(?:[.-][0-9A-Za-z][0-9A-Za-z.-]*)?)$/.exec(output);
   if (!match) throw new Error("The installed Forge614 Workers did not report a valid version.");
   return match[1]!;
 }
 
 /**
- * Downloads an installer script to a private temporary file marked executable.
- * @param url Where to download the installer from.
- * @returns The path of the downloaded installer and a `cleanup` that removes its temporary folder.
- * @throws Error with a clear message when the server answers with an HTTP error status; a network failure rejects with the error of `fetch` itself.
+ * Descarga un script instalador a un archivo temporal privado y lo marca como ejecutable.
+ *
+ * @param url Dirección desde donde se descarga el instalador.
+ * @returns La ruta del instalador descargado y una función `cleanup` que borra su carpeta temporal.
+ * @throws Error con un mensaje claro si el servidor responde con un estado de error HTTP; un fallo de red rechaza con el error del propio `fetch` (la función de descarga del entorno de ejecución).
  */
 async function downloadInstaller(url: string): Promise<{ installer: string; cleanup: () => void }> {
   const response = await fetch(url);
   if (!response.ok) throw new Error("Could not download the Forge614 Workers installer.");
+  // El archivo vive en una carpeta temporal nueva; primero se escribe con permisos 0o600 (solo el dueño lee y escribe) y después se marca ejecutable solo para el dueño (0o700).
   const directory = mkdtempSync(join(tmpdir(), "forge614-workers-update-"));
   const installer = join(directory, "install.sh");
   writeFileSync(installer, new Uint8Array(await response.arrayBuffer()), { mode: 0o600 });
@@ -70,42 +81,54 @@ async function downloadInstaller(url: string): Promise<{ installer: string; clea
 }
 
 /**
- * Downloads the latest installer and runs it with `--force` to replace the active version, then reads
- * which version is installed. The downloaded file is always removed, even when the installation fails.
- * @param currentVersion Version of the running program, taken as the version installed before the update.
- * @param options.download Download to use; defaults to a real HTTP download.
- * @param options.spawn Process launcher; defaults to `spawnSync`, inheriting the terminal so the installer's messages are visible.
- * @param options.readInstalledVersion Read of the version after installing; defaults to running the installed command.
- * @returns Whether the version changed, the previous version and the installed one.
- * @throws Error when the download fails, the installer cannot start or exits non-zero, or the installed command does not report a valid version.
+ * Descarga el último instalador y lo ejecuta con `--force` para reemplazar la versión activa, y luego lee qué
+ * versión quedó instalada. El archivo descargado se borra siempre, incluso si la instalación falla.
+ *
+ * @param currentVersion Versión del programa en ejecución, que se toma como la versión instalada antes de actualizar.
+ * @param options Dependencias reemplazables; sin ellas se usan las reales.
+ * @param options.download Descarga que se usa; por defecto una descarga HTTP real.
+ * @param options.spawn Lanzador de procesos; por defecto `spawnSync` (lanzamiento síncrono), heredando la terminal para que se vean los mensajes del instalador.
+ * @param options.readInstalledVersion Lectura de la versión después de instalar; por defecto ejecuta el comando instalado.
+ * @returns Si la versión cambió, la versión anterior y la instalada.
+ * @throws Error si la descarga falla, el instalador no puede arrancar o sale con código distinto de cero, o el comando instalado no informa una versión válida.
  */
 export async function updateInstalledWorkers(currentVersion: string, options: {
+  /** Descarga del instalador; recibe la dirección y devuelve la ruta local y cómo borrarla. */
   download?: Download;
+  /** Lanzador del proceso del instalador. */
   spawn?: Spawn;
+  /** Lectura de la versión que quedó instalada. */
   readInstalledVersion?: ReadInstalledVersion;
 } = {}): Promise<UpdateResult> {
+  // La descarga va fuera del `try`: si falla, no hay archivo temporal que limpiar y nunca se lanza el instalador.
   const downloaded = await (options.download ?? downloadInstaller)(LATEST_INSTALLER_URL);
   const spawn: Spawn = options.spawn ?? ((command, args, spawnOptions) => spawnSync(command, args, spawnOptions));
   try {
+    // Se ejecuta `bash <instalador> --force` con la terminal heredada.
     const result = spawn("bash", [downloaded.installer, "--force"], { stdio: "inherit" });
+    // Un error de lanzamiento (por ejemplo, no existe `bash`) se relanza tal cual; un código distinto de cero es un instalador que falló.
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error("The Forge614 Workers installer failed; the installed version was not confirmed.");
+    // La versión se confirma preguntándole al comando recién instalado; «actualizado» significa que difiere de la que corría.
     const installedVersion = (options.readInstalledVersion ?? readInstalledVersion)();
     return { updated: installedVersion !== currentVersion, previousVersion: currentVersion, installedVersion };
   } finally {
+    // El instalador descargado se borra en todos los caminos.
     downloaded.cleanup();
   }
 }
 
 /**
- * Runs the `update` command: validates its arguments, updates, and prints a one-line outcome. Errors
- * go to `writeError` and end with a non-zero exit code; nothing here reads stdin.
- * @param args Arguments after `update`; none are accepted.
- * @param currentVersion Version of the running program.
- * @param io.writeLine Receives each normal output line.
- * @param io.writeError Receives each error line.
- * @param update Update to run; defaults to {@link updateInstalledWorkers}.
- * @returns The process exit code: 0 on success, 2 for unexpected arguments, 1 when the update fails.
+ * Ejecuta el comando `update`: valida sus argumentos, actualiza e imprime un resultado de una línea. Los
+ * errores van a `writeError` y terminan con código de salida distinto de cero; nada de aquí lee stdin.
+ *
+ * @param args Argumentos que siguen a `update`; no se acepta ninguno.
+ * @param currentVersion Versión del programa en ejecución.
+ * @param io Salidas por donde se escribe el resultado; así la función se prueba sin imprimir de verdad.
+ * @param io.writeLine Recibe cada línea de salida normal.
+ * @param io.writeError Recibe cada línea de error.
+ * @param update Actualización que se ejecuta; por defecto {@link updateInstalledWorkers}.
+ * @returns El código de salida del proceso: 0 si todo salió bien, 2 si llegaron argumentos que no se esperaban, 1 si la actualización falla.
  */
 export async function runUpdateCommand(
   args: string[],
@@ -113,12 +136,14 @@ export async function runUpdateCommand(
   io: { writeLine: (line: string) => void; writeError: (line: string) => void },
   update: (currentVersion: string) => Promise<UpdateResult> = updateInstalledWorkers,
 ): Promise<number> {
+  // `update` no admite argumentos: cualquiera se rechaza con código 2 antes de descargar nada.
   if (args.length > 0) {
     io.writeError("forge614-workers update takes no arguments.");
     return 2;
   }
   try {
     const result = await update(currentVersion);
+    // Un mensaje distinto según si la versión cambió o ya estaba al día.
     io.writeLine(
       result.updated
         ? `forge614-workers updated from ${result.previousVersion} to ${result.installedVersion}.`
@@ -126,6 +151,7 @@ export async function runUpdateCommand(
     );
     return 0;
   } catch (error) {
+    // Cualquier fallo de la actualización se informa por la salida de errores con código 1; no se relanza.
     io.writeError(`Could not update forge614-workers: ${(error as Error).message}`);
     return 1;
   }
