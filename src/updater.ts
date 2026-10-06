@@ -67,7 +67,7 @@ function readInstalledVersion(): string {
  *
  * @param url Dirección desde donde se descarga el instalador.
  * @returns La ruta del instalador descargado y una función `cleanup` que borra su carpeta temporal.
- * @throws Error con un mensaje claro si el servidor responde con un estado de error HTTP; un fallo de red rechaza con el error del propio `fetch` (la función de descarga del entorno de ejecución).
+ * @throws Error con un mensaje claro si el servidor responde con un estado de error HTTP; un fallo de red rechaza con el error del propio `fetch` (la función de descarga del entorno de ejecución); un fallo al crear o escribir el archivo temporal lanza el error del sistema de archivos y deja sin borrar la carpeta ya creada.
  */
 async function downloadInstaller(url: string): Promise<{ installer: string; cleanup: () => void }> {
   const response = await fetch(url);
@@ -90,7 +90,7 @@ async function downloadInstaller(url: string): Promise<{ installer: string; clea
  * @param options.spawn Lanzador de procesos; por defecto `spawnSync` (lanzamiento síncrono), heredando la terminal para que se vean los mensajes del instalador.
  * @param options.readInstalledVersion Lectura de la versión después de instalar; por defecto ejecuta el comando instalado.
  * @returns Si la versión cambió, la versión anterior y la instalada.
- * @throws Error si la descarga falla, el instalador no puede arrancar o sale con código distinto de cero, o el comando instalado no informa una versión válida.
+ * @throws Error si la descarga falla, el instalador no puede arrancar, termina por una señal o sale con código distinto de cero, o el comando instalado no se puede ejecutar o no informa una versión válida.
  */
 export async function updateInstalledWorkers(currentVersion: string, options: {
   /** Descarga del instalador; recibe la dirección y devuelve la ruta local y cómo borrarla. */

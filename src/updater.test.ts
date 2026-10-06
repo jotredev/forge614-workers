@@ -107,7 +107,7 @@ describe("updateInstalledWorkers", () => {
 
   /**
    * Cuando la versión instalada (1.0.0) es igual a la que corre (1.0.0), el resultado dice que nada cambió
-   * (`updated: false`). Importa porque de ahí sale el mensaje «ya está al día» en vez de «actualizado».
+   * (`updated: false`). Importa porque de ahí sale el mensaje «is already up to date» en vez de «updated from … to …».
    */
   test("reports unchanged when the installed version matches the current one", async () => {
     const result = await updateInstalledWorkers("1.0.0", {
@@ -143,7 +143,7 @@ describe("installedWorkersCommand", () => {
 describe("runUpdateCommand", () => {
   /**
    * Una descarga fallida sale como un mensaje claro por la salida de errores y un código distinto de cero (1);
-   * la salida normal queda vacía. Importa porque es lo que ve el usuario cuando no hay red o el servidor responde con error.
+   * la salida normal queda vacía. Importa porque así falla `update` con un error HTTP del servidor; sin red el prefijo es el mismo pero el detalle es el error de `fetch`.
    */
   test("a failed download ends with exit 1 and a clear message", async () => {
     const { io, out, err } = collectingIo();

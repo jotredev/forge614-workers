@@ -1,7 +1,7 @@
 /**
  * Pruebas de `runBatch` (`src/runner.ts`): qué eventos emite según cómo termina cada tarea, cómo clasifica los
  * rechazos de Engines, cuándo corta el lote por cuota y cómo confirma el bloqueo de solo lectura.
- * Todas usan dobles (versiones falsas de las dependencias que no lanzan procesos reales y registran lo que reciben).
+ * Usan dobles de las dependencias de `runBatch` (versiones falsas que no lanzan procesos reales; algunas registran lo que reciben) y los adaptadores reales de `claude-code` y `codex`.
  */
 import { describe, test, expect } from "bun:test";
 import { runBatch } from "./runner";
@@ -33,7 +33,8 @@ function makeTask(overrides: Partial<TaskSpec> = {}): TaskSpec {
 describe("runBatch", () => {
   /**
    * Comprueba el camino feliz de una tarea: salen `task_started`, `task_completed` y `run_completed` en ese
-   * orden, con 1 completada, 0 fallidas y 0 sin iniciar. Importa porque es la salida que Atlas espera de un lote sano.
+   * orden, con 1 completada, 0 fallidas y 0 sin iniciar, y que los argumentos del proceso quedan exactamente en
+   * `["-p"]` (el adaptador de claude-code no agrega nada). Importa porque es la salida que Atlas espera de un lote sano.
    */
   test("emits task_started, task_completed, and run_completed for a successful task", async () => {
     const events: TaskEvent[] = [];
@@ -88,7 +89,7 @@ describe("runBatch", () => {
     //   - un prefijo correcto de 4096 bytes exactos se detiene en 1024
     //     emojis (1024 * 4 = 4096 bytes) y nunca llega al patrón.
     //   - un prefijo con el error `.slice(0, 4096)` (por unidades de código)
-    //     incluiría los 3012 unidades completas y coincidiría con el patrón
+    //     incluiría las 3011 unidades completas y coincidiría con el patrón
     //     por equivocación.
     const filler = "\u{1F389}".repeat(1500);
     const stdout = filler + "usage limit";
@@ -448,7 +449,7 @@ describe("runBatch", () => {
 
   /**
    * Comprueba que el `readableDir` de la tarea (`/home/user/some-project`) llega tal cual a `resolveHeadlessCommand`.
-   * Importa porque es la carpeta extra que se le deja leer al ayudante; si no llegara, el ayudante no vería el proyecto.
+   * Importa porque es la carpeta extra a la que se le da acceso al ayudante; si no llegara, el ayudante no vería el proyecto.
    */
   test("passes task.readableDir through to resolveHeadlessCommand", async () => {
     let capturedOptions: ResolveHeadlessOptions | undefined;
@@ -491,7 +492,7 @@ describe("runBatch", () => {
 
     /**
      * Arma dobles que registran cada llamada para poder probar lo que nunca ocurrió. El comando falso que arma
-     * `resolveHeadlessCommand` antepone `--tools Read,Grep,Glob` solo cuando la tarea trae `readOnly`.
+     * `resolveHeadlessCommand` antepone `--tools Read,Grep,Glob` solo cuando la tarea trae `readOnly: true`.
      *
      * @param lockCheck Respuesta falsa de Engines a la pregunta del bloqueo: recibe el asistente y devuelve `true`, `false` o lanza un error.
      * @returns `calls` (qué asistentes se consultaron, qué opciones llegaron a `resolveHeadlessCommand`, cuántos procesos se lanzaron y con qué argumentos) y `deps` (los dobles listos para pasar a `runBatch`).

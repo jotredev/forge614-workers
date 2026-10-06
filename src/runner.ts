@@ -1,8 +1,9 @@
 /**
  * Ejecutor de lotes (batch: la lista de tareas que Atlas manda en una sola corrida): recorre las tareas una tras
  * otra, le pide a Engines (forge614-engines, el programa que arma el comando de cada asistente) el comando de
- * cada una, lo lanza como proceso y emite un evento por cada resultado. Existe para que una tarea que falle,
- * agote la cuota o se cuelgue no tumbe el lote, y para que el último evento siempre sea `run_completed`.
+ * cada una, lo lanza como proceso y emite un evento por cada resultado. Existe para que una tarea que falle o
+ * se cuelgue no tumbe el lote (si una agota la cuota, el lote se detiene a propósito y las tareas que faltan no
+ * se inician), y para que el último evento sea siempre `run_completed`, salvo que `onEvent` lance un error.
  * Lo importa `src/cli.ts`; lo prueba `src/runner.test.ts`. Piezas: `RunBatchOptions`, `RunBatchDeps`,
  * `RunBatchResult` y la función `runBatch`.
  */
@@ -66,7 +67,7 @@ const defaultDeps: RunBatchDeps = {
  * @param onEvent Función que recibe cada evento (`task_started`, `task_completed`, `task_failed`, `quota_exhausted`, `run_completed`) en cuanto ocurre; quien llama decide qué hacer con él.
  * @param deps Dependencias externas; por defecto las reales, y las pruebas pasan dobles.
  * @returns `{ pausedByQuota }`: `true` si una tarea agotó la cuota y el lote se cortó ahí.
- * @throws Lo que lance `onEvent` al emitir `task_started` o `run_completed`, que se emiten fuera del `try` de cada tarea; un fallo de una tarea nunca lanza, se convierte en un evento `task_failed`.
+ * @throws Lo que lance `onEvent` al emitir `task_started` o `run_completed` (fuera del `try` de cada tarea) o al emitir el `task_failed` del `catch`; si `onEvent` lanza en otro evento, el `catch` lo trata como fallo de esa tarea. Un fallo de una tarea nunca lanza: se convierte en un evento `task_failed`.
  */
 export async function runBatch(
   options: RunBatchOptions,
@@ -114,7 +115,7 @@ export async function runBatch(
       startedAt: new Date().toISOString(),
     });
 
-    // El cuerpo de cada tarea va envuelto para que un lanzamiento inesperado
+    // El cuerpo de cada tarea va envuelto para que una excepción inesperada
     // en cualquier punto (un error en otra parte, falta de memoria, EMFILE
     // (demasiados archivos abiertos), cualquier cosa que no esté ya modelada
     // como fallo tipado de resolveHeadlessCommand o runProcess) marque solo
@@ -145,7 +146,7 @@ export async function runBatch(
         continue;
       }
 
-      // Se le pide a Engines el comando de esta tarea con todos sus datos (asistente, modelo, nivel, carpeta legible, solo lectura).
+      // Se le pide a Engines el comando de esta tarea con su asistente, ejecutable, modelo, nivel de razonamiento, carpeta legible y solo lectura; el prompt no se le manda a Engines: viaja por stdin al lanzar el proceso.
       const resolved = await deps.resolveHeadlessCommand({
         enginesBin: options.enginesBin,
         agentId: task.agentId,
@@ -196,7 +197,7 @@ export async function runBatch(
         continue;
       }
 
-      // El adaptador (reglas propias de cada asistente) puede faltar si el asistente no está registrado; entonces no se agregan argumentos.
+      // El adaptador (reglas propias de cada asistente) puede faltar si el asistente no está registrado; entonces no se agregan argumentos y tampoco se detecta cuota (un fallo con salida distinta de cero sale como generic_error).
       const adapter = getAdapter(task.agentId);
       // El prompt viaja por stdin (la entrada estándar del proceso), no como argumento de línea de comandos.
       const result = await deps.runProcess({
@@ -241,7 +242,7 @@ export async function runBatch(
         continue;
       }
 
-      if (!result.ok) continue; // guarda de exhaustividad (cubre todos los casos posibles del tipo); las ramas de fallo ya se trataron arriba
+      if (!result.ok) continue; // Guarda para el compilador: `spawn_error` y `timeout` ya se trataron arriba, así que aquí `result` solo puede ser `ok: true` y esta línea no se ejecuta; si se agregara otro motivo de fallo, la tarea se saltaría sin emitir ningún evento final.
 
       if (result.exitCode !== 0) {
         // La detección de cuota solo tiene sentido con una salida distinta de
@@ -254,10 +255,7 @@ export async function runBatch(
         // generic_error son ambos resultados de «salida distinta de cero» que
         // solo se distinguen por si el adaptador reconoce un patrón de cuota.
         //
-        // Se corta por bytes UTF-8 reales, no por unidades de código UTF-16:
-        // `String.slice` cuenta unidades de código, lo que se aparta del
-        // contrato de «exactamente N bytes» en cuanto el stdout trae
-        // caracteres de varios bytes antes del punto de corte.
+        // Se corta por bytes UTF-8 reales, no por unidades de código UTF-16: `String.slice` cuenta unidades de código, lo que se aparta de los «exactamente 4096 bytes» (`QUOTA_STDOUT_PREFIX_BYTES`) en cuanto el stdout trae caracteres de varios bytes antes del punto de corte.
         const stdoutPrefix = Buffer.from(result.stdout.text, "utf8")
           .subarray(0, QUOTA_STDOUT_PREFIX_BYTES)
           .toString("utf8");
@@ -313,7 +311,7 @@ export async function runBatch(
         stderrTruncated: result.stderr.truncated,
       });
     } catch (err) {
-      // Lanzamiento inesperado dentro de la tarea: se cuenta como fallo de esta tarea y el lote sigue con la siguiente.
+      // Excepción inesperada dentro de la tarea: se cuenta como fallo de esta tarea y el lote sigue con la siguiente.
       failed++;
       const message = err instanceof Error ? err.message : String(err);
       onEvent({

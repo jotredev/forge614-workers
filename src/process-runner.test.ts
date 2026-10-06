@@ -1,6 +1,7 @@
 /**
  * Pruebas de `runProcess` (`src/process-runner.ts`) con procesos reales de `test/fixtures` (scripts pequeños que
- * imprimen su stdin, su carpeta, su entorno o se quedan colgados): stdin, salidas, carpeta temporal, entorno y tiempo límite.
+ * imprimen su stdin, su carpeta, su entorno o N bytes, que salen sin leer su entrada o que se quedan colgados
+ * (incluso ignorando SIGTERM)): stdin, salidas, carpeta temporal, entorno y tiempo límite.
  */
 import { describe, test, expect } from "bun:test";
 import { existsSync } from "node:fs";
@@ -153,7 +154,7 @@ describe("runProcess", () => {
   });
 
   /**
-   * Pide a `big-output.js` 1000 bytes con tope de 100 y comprueba que el texto guardado mide 100, que `bytes` informa
+   * Pide a `big-output.js` 1000 bytes con tope de 100 y comprueba que el texto guardado tiene 100 caracteres (100 bytes, porque la salida es ASCII), que `bytes` informa
    * los 1000 reales y que `truncated` es `true`. Importa porque quien lee el evento debe saber que la salida quedó incompleta y de qué tamaño era.
    */
   test("truncates stdout at maxOutputBytes and reports the true observed size", async () => {
