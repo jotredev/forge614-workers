@@ -96,7 +96,7 @@ ensure_engines() {
 
 # No recibe argumentos (usa `forge_home`, `workers_root`, `bin_dir`, `link` y `force`). Rechaza un destino que no se puede
 # usar con seguridad: termina el script con código 1 (vía `fail`) si alguna de las tres carpetas es un enlace o existe pero
-# no es carpeta, si la ruta del comando activo es una carpeta, o si ese comando existe, no es un enlace y no se pasó
+# no es carpeta, si la ruta del comando activo es una carpeta (o un enlace que apunta a una carpeta), o si ese comando existe, no es un enlace y no se pasó
 # `--force`. Si todo está bien, devuelve 0. Se llama antes y después de asegurar Engines.
 check_destination() {
   [ ! -L "$forge_home" ] && { [ ! -e "$forge_home" ] || [ -d "$forge_home" ]; } \
@@ -137,7 +137,7 @@ if [ -n "$version" ] && ! [[ "$version" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Z
   fail 'Invalid release tag. Use a semantic version tag such as v1.2.3.'
 fi
 
-# Rutas de la instalación. `FORGE614_HOME` debe ser absoluta; sin ella se usa `$HOME/.forge614`, y sin `HOME` el shell termina con error.
+# Rutas de la instalación. Si `FORGE614_HOME` está definida y no vacía debe ser una ruta absoluta (una relativa termina con error); si no está definida o está vacía se usa `$HOME/.forge614`, y solo en ese caso, si `HOME` tampoco está definida o está vacía, el shell termina con error.
 repo='jotredev/forge614-workers'
 forge_home="${FORGE614_HOME:-${HOME:?HOME must be set}/.forge614}"
 case "$forge_home" in /*) ;; *) fail 'FORGE614_HOME must be an absolute path.' ;; esac
@@ -213,8 +213,9 @@ download() {
 }
 
 # Recibe el nombre de un archivo de la versión publicada ($1) y escribe en stdout su dirección de descarga, leída de
-# `release.json`. Devuelve 0 solo si exactamente una dirección termina con ese nombre; con ninguna o con varias devuelve 1
-# (el `exit 1` del `awk`, que como `pipefail` está activo es el código de toda la tubería) y no imprime nada.
+# `release.json`. Elige las direcciones que terminan con ese texto (compara el final de la dirección, no el nombre completo del
+# archivo: `x-SHA256SUMS` también valdría). Devuelve 0 solo si hay exactamente una; con ninguna o con varias devuelve 1 (el
+# `exit 1` del `awk`, que por ser el último comando de la tubería es el código de toda ella) y no imprime nada.
 asset_url() {
   local asset_name="$1"
   # `tr` pone cada objeto del JSON en su propia línea, `sed` extrae el valor de `browser_download_url` y `awk` conserva
@@ -258,7 +259,7 @@ else
 fi
 
 # Se descargan las sumas y el binario, y se compara la huella SHA-256 esperada (la que da `SHA256SUMS`, que debe
-# traer exactamente una línea válida de 64 caracteres hexadecimales para este binario) con la del archivo descargado.
+# traer exactamente una línea válida (nombre igual al del binario y 64 caracteres hexadecimales en minúscula) para este binario) con la del archivo descargado.
 download "$manifest_url" "$download_dir/SHA256SUMS" || fail 'Could not download SHA256SUMS.'
 download "$binary_url" "$download_dir/$artifact" || fail "Could not download ${artifact}."
 expected_digest="$(awk -v artifact="$artifact" '
@@ -276,8 +277,7 @@ fi
 ensure_engines
 check_destination
 
-# Se crean las carpetas con permisos 700 (solo el dueño). Si la carpeta de la versión no existía, se marca para que `cleanup`
-# la borre si la instalación no llega al final.
+# Se crean las carpetas que falten (la de `FORGE614_HOME` con permisos 700 solo si no existía) y `workers`, `workers/bin` y la carpeta de la versión se dejan siempre con permisos 700 (solo el dueño), existieran o no. Si la carpeta de la versión no existía, se marca para que `cleanup` la borre si la instalación no llega al final.
 if [ ! -e "$forge_home" ]; then mkdir -p -- "$forge_home" && chmod 700 "$forge_home"; fi
 mkdir -p -- "$workers_root" "$bin_dir" || fail 'Could not create the Workers installation folders.'
 if [ ! -d "$target" ]; then created_target=1; fi
@@ -286,7 +286,7 @@ chmod 700 "$workers_root" "$bin_dir" "$target"
 
 # El binario se coloca con un renombrado atómico (que ocurre de una vez o no ocurre) dentro de su carpeta de versión, y el
 # enlace activo se cambia también con un renombrado atómico, de modo que el comando activo nunca queda a medio escribir.
-# `$$` es el número del proceso del script y evita que dos instalaciones simultáneas usen el mismo nombre temporal.
+# `$$` es el número del proceso del script y evita que dos instalaciones simultáneas usen el mismo nombre para el enlace temporal; el binario temporal ya tiene un nombre único por `mktemp`.
 staging="$(mktemp "$target/.forge614-workers.XXXXXX")"
 cp -- "$download_dir/$artifact" "$staging"
 chmod 755 "$staging"
