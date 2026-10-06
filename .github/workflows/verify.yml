@@ -59,7 +59,7 @@ jobs:
       - run: bun test
       # Revisa los tipos sin generar archivos.
       - run: bun run typecheck
-      # Rechaza espacios y marcadores de conflicto que Git detecta en el diff.
+      # Rechaza espacios sobrantes y marcadores de conflicto en los cambios que aparezcan en el árbol de trabajo durante esta ejecución (el repositorio recién descargado no trae ninguno).
       - run: git diff --check
       # Valida la sintaxis del instalador sin ejecutarlo.
       - run: bash -n scripts/install.sh

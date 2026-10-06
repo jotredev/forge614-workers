@@ -41,4 +41,5 @@ Los tests `src/**/*.test.ts` cubren tipos, adapters, registro, Engines client, r
 - `docs/10-installer.md` y `docs/10-installer.en.md`: instalador, `update` y flujos de verificación/publicación.
 - `docs/11-troubleshooting.md` y `docs/11-troubleshooting.en.md`: códigos, mensajes y acciones de diagnóstico.
 - `docs/12-glossary.md` y `docs/12-glossary.en.md`: vocabulario del contrato de Workers.
-- `docs/notion-map.json`: mapa local ↔ Notion con la huella sha256 de cada manual.
+- `CONTRACT.md` y `CONTRACT.en.md`: contrato público de Workers (comandos, códigos de salida, razones de fallo).
+- `docs/notion-map.json`: mapa local ↔ Notion con la huella sha256 de cada manual 00–08 (09–12 y `CONTRACT.md` aún no figuran).
