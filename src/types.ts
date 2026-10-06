@@ -7,12 +7,12 @@
  */
 export const REASONING_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 
-/** Uno de los valores enumerados en {@link REASONING_LEVELS}; impide pasar a Engines un texto desconocido. */
+/** Uno de los valores de {@link REASONING_LEVELS}; el compilador rechaza otros textos, y en ejecución solo `parseTask` los rechaza. */
 export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
 /** Una unidad de trabajo de un lote, tal como Atlas la describe por stdin. */
 export interface TaskSpec {
-  /** Identificador de la tarea, repetido en cada evento para asociar el resultado con la entrada. */
+  /** Identificador de la tarea, repetido como `taskId` en cada evento de esa tarea (`task_started`, `task_completed`, `task_failed`, `quota_exhausted`) para asociar el resultado con la entrada. */
   id: string;
   /** Identificador del asistente que Engines debe resolver. */
   agentId: string;
@@ -39,7 +39,7 @@ export interface TaskSpec {
 export interface RunInput {
   /** Ruta o nombre del ejecutable de Engines. */
   enginesBin: string;
-  /** Máximo de bytes que se conservan de stdout y stderr por tarea. */
+  /** Máximo de bytes que se conservan de cada salida de una tarea (stdout y stderr por separado); lo que sobra se descarta y se marca como truncado. */
   maxOutputBytes: number;
   /** Tareas del lote en el orden en que deben ejecutarse. */
   tasks: TaskSpec[];
@@ -52,7 +52,7 @@ export type TaskFailureReason =
   | "spawn_error"
   | "generic_error";
 
-/** Evento que Workers emite: inicio o resultado de una tarea, cuota agotada, resumen del lote o error fatal previo al lote. */
+/** Evento que Workers emite: inicio o resultado de una tarea, cuota agotada, resumen del lote o error fatal (`invalid_input` y `engines_bin_not_found` salen antes de correr el lote; `unexpected_error` puede salir después de que ya corrieron tareas). */
 export type TaskEvent =
   | { event: "task_started"; taskId: string; agentId: string; startedAt: string }
   | {
@@ -106,7 +106,9 @@ export type TaskEvent =
       message: string;
     };
 
+/** Tope predeterminado de bytes guardados por cada salida (stdout y stderr por separado) cuando el documento no trae `maxOutputBytes`: 10 MiB. */
 export const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+/** Tiempo límite predeterminado de una tarea cuando no trae `timeoutMs`: 10 minutos, en milisegundos. */
 export const DEFAULT_TASK_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Error de validación que identifica un documento de entrada roto antes de iniciar ninguna tarea. */
@@ -118,7 +120,7 @@ export class InvalidInputError extends Error {}
  *
  * @param raw Texto JSON completo recibido por stdin.
  * @returns La entrada validada, con `maxOutputBytes`, `reasoningLevel` y `timeoutMs` ya normalizados.
- * @throws {@link InvalidInputError} si el JSON está roto, la raíz no es un objeto, falta `enginesBin` o `tasks`, un tope no es positivo o alguna tarea tiene un campo inválido.
+ * @throws {@link InvalidInputError} si el JSON está roto, la raíz es `null` o no es un objeto (un arreglo pasa esta comprobación y falla después por no traer `enginesBin`), `enginesBin` falta o es un texto vacío, `tasks` no es un arreglo, `maxOutputBytes` no se convierte (con `Number`) en un número finito positivo o alguna tarea tiene un campo inválido.
  */
 export function parseRunInput(raw: string): RunInput {
   let data: unknown;
@@ -158,7 +160,7 @@ export function parseRunInput(raw: string): RunInput {
  * @param raw Valor sin validar de la entrada de `tasks`.
  * @param index Posición de la tarea, usada para nombrar con precisión el campo inválido.
  * @returns La tarea normalizada, con valores predeterminados para el tiempo límite y el nivel de razonamiento.
- * @throws {@link InvalidInputError} con `tasks[index]` si la entrada no es un objeto, falta un texto obligatorio, el tiempo no es positivo, el nivel no está permitido o `readOnly` no es booleano.
+ * @throws {@link InvalidInputError} con `tasks[index]` si la entrada no es un objeto, falta un texto obligatorio (`id`, `agentId`, `executable`, `prompt`) o está vacío, `timeoutMs` no se convierte (con `Number`) en un número finito positivo, `reasoningLevel` no está permitido o `readOnly` no es booleano; el lote completo falla entonces antes de iniciar cualquier tarea.
  */
 function parseTask(raw: unknown, index: number): TaskSpec {
   if (typeof raw !== "object" || raw === null) {

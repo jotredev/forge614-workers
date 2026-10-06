@@ -29,7 +29,7 @@ describe("claudeCodeAdapter.detectQuotaExhausted", () => {
   });
 });
 
-/** Agrupa los argumentos propios de la carpeta temporal que este adaptador debe agregar. */
+/** Agrupa la comprobación de que este adaptador no agrega argumentos propios de la carpeta temporal. */
 describe("claudeCodeAdapter.extraArgs", () => {
   /** Comprueba que devuelve una lista vacía porque el comando resuelto no necesita ninguna bandera adicional. */
   test("needs no extra CLI flags", () => {

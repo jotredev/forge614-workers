@@ -28,7 +28,7 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     });
   });
 
-  /** Comprueba que el modelo `claude-haiku-4-5` se conserva como los argumentos `--model` del comando resuelto. */
+  /** Comprueba que el modelo `claude-haiku-4-5` llega al comando resuelto como el par `--model claude-haiku-4-5`, después de `-p`. */
   test("forwards --model", async () => {
     const result = await resolveHeadlessCommand({
       enginesBin,
@@ -62,7 +62,7 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     }
   });
 
-  /** Comprueba el bloqueo exacto de solo lectura y su orden antes de `-p`, para que no quede sujeto a configuración interactiva. */
+  /** Comprueba que `readOnly: true` produce para claude-code exactamente `--tools Read,Grep,Glob --permission-mode dontAsk --strict-mcp-config` antes de `-p`, con `stdin: true`; fija el bloqueo completo para detectar cualquier cambio de Engines en él. */
   test("forwards --read-only to claude-code as the exact read-only lock, before -p", async () => {
     const result = await resolveHeadlessCommand({
       enginesBin,
@@ -89,7 +89,7 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     });
   });
 
-  /** Comprueba que el segundo adaptador recibe `exec`, el entorno `read-only` y la omisión de configuración del usuario. */
+  /** Comprueba que para codex `readOnly: true` produce exactamente `exec --sandbox read-only --ignore-user-config`, con `stdin: true`. */
   test("forwards --read-only to codex as the exact read-only lock", async () => {
     const result = await resolveHeadlessCommand({
       enginesBin,
@@ -176,9 +176,10 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
   /** Comprueba con 1,100,000 caracteres que el prompt no entra en los argumentos y, por tanto, no supera `ARG_MAX`. */
   test("resolves successfully for a prompt far larger than the OS ARG_MAX, since the prompt is never passed as a CLI arg", async () => {
     // Regresión del fallo `E2BIG`: antes el prompt completo también iba como `--prompt <valor>` junto a
-    // `--stdin-prompt`. Más de 1 MB supera `ARG_MAX` en algunos sistemas (hasta unos 128 KiB) y haría que el
-    // lanzamiento fallara de forma síncrona. Se usa el ejecutable real porque se comprueba su manejo real de
-    // `argv` (lista de argumentos), no el de un doble.
+    // `--stdin-prompt`. Un prompt así de grande (más de 1 MB) supera `ARG_MAX` en algunas plataformas (tan bajo
+    // como unos 128 KiB en Linux) y haría que `Bun.spawn` lanzara una excepción de forma síncrona al invocar al
+    // propio forge614-engines. Se usa el ejecutable real porque se comprueba el manejo real de `argv` (lista de
+    // argumentos) de la herramienta, no el de un doble.
     const largePrompt = "x".repeat(1_100_000);
 
     const result = await resolveHeadlessCommand({
