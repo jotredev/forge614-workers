@@ -3,7 +3,7 @@
 ## Producto y contratos
 
 - `README.md` y `README.en.md`: entrada del proyecto (qué es, instalación, entrada/salida y documentación) en español e inglés.
-- `package.json`: versión `1.0.0`, scripts de test/typecheck/build y dependencias.
+- `package.json`: versión `1.0.1`, scripts de test/typecheck/build y dependencias.
 - `tsconfig.json`: tipado estricto de `src`, `test` y `scripts`.
 - `CHANGELOG.md`: historial de versiones (una entrada `## <versión>` por release).
 - `LICENSE` y `SECURITY.md`: licencia y política de seguridad.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+Sin cambios de comportamiento: el código, las pruebas, el instalador y los flujos de publicación quedan documentados por completo en español, y los manuales cubren los archivos de datos, el instalador, la resolución de errores y el glosario.
+
+- **Código y pruebas documentados:** todo `src/`, `scripts/` y `test/` lleva comentarios en español (antes estaban en inglés): cada función con lo que hace, devuelve y lanza, cada prueba con lo que comprueba y por qué importa, y cada programa falso de `test/fixtures/` con la prueba que lo usa.
+- **Manuales:** capítulos nuevos 09 (archivos de datos), 10 (instalador), 11 (resolución de errores) y 12 (glosario), en español y en inglés, y correcciones en el capítulo 03.
+- **Contrato:** `CONTRACT.md` y `CONTRACT.en.md` con las órdenes públicas, los códigos de salida y de error y la compatibilidad.
+- **Repositorio:** `verify.yml` y `release.yml` explican con comentarios cada trabajo y cada paso.
+
 ## 1.0.0
 
 Primera versión publicada de Forge614 Workers: ya se instala con un solo comando, se actualiza con otro y se verifica en cada cambio.
