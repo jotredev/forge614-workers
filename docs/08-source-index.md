@@ -37,4 +37,8 @@ Los tests `src/**/*.test.ts` cubren tipos, adapters, registro, Engines client, r
 
 - `docs/adding-a-new-engine-adapter.md`: procedimiento operativo completo.
 - `docs/00`–`docs/08`: fuente revisada bilingüe y navegable.
+- `docs/09-data-files.md` y `docs/09-data-files.en.md`: campos de archivos de datos, configuración, fixtures y apoyos de pruebas.
+- `docs/10-installer.md` y `docs/10-installer.en.md`: instalador, `update` y flujos de verificación/publicación.
+- `docs/11-troubleshooting.md` y `docs/11-troubleshooting.en.md`: códigos, mensajes y acciones de diagnóstico.
+- `docs/12-glossary.md` y `docs/12-glossary.en.md`: vocabulario del contrato de Workers.
 - `docs/notion-map.json`: mapa local ↔ Notion con la huella sha256 de cada manual.
