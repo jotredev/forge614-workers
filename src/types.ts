@@ -1,45 +1,58 @@
 /**
- * The five reasoning levels that Engines knows. Workers only checks that the
- * text is on this list; whether a given agent accepts a given level is decided
- * by Engines (`INVALID_REASONING_LEVEL`), never by Workers.
+ * Contratos de entrada y salida de Workers: describe las tareas que llegan por stdin (entrada estándar), los
+ * eventos que devuelve el lote y la validación del documento JSON (texto de datos estructurados). Lo usan el
+ * cliente de Engines, el ejecutor y la interfaz de línea de comandos; `src/types.test.ts` prueba la validación.
+ * Los cinco niveles de razonamiento son los que Engines conoce. Workers solo comprueba que el texto esté en
+ * esta lista; Engines decide si un asistente acepta un nivel y devuelve `INVALID_REASONING_LEVEL` si no.
  */
 export const REASONING_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
 
-/** One of the {@link REASONING_LEVELS}. */
+/** Uno de los valores enumerados en {@link REASONING_LEVELS}; impide pasar a Engines un texto desconocido. */
 export type ReasoningLevel = (typeof REASONING_LEVELS)[number];
 
-/** One unit of work in a batch, as Atlas describes it on stdin. */
+/** Una unidad de trabajo de un lote, tal como Atlas la describe por stdin. */
 export interface TaskSpec {
+  /** Identificador de la tarea, repetido en cada evento para asociar el resultado con la entrada. */
   id: string;
+  /** Identificador del asistente que Engines debe resolver. */
   agentId: string;
+  /** Nombre o ruta del ejecutable que Engines usará al construir el comando. */
   executable: string;
+  /** Instrucción completa que se entrega al proceso del asistente por stdin. */
   prompt: string;
-  /** Extra folder the helper may access, forwarded to Engines as `--readable-dir`. It grants access; it does not make anything read-only (see `readOnly`). */
+  /** Carpeta adicional a la que puede acceder el ayudante, enviada a Engines como `--readable-dir`; concede acceso, pero no impone solo lectura (véase `readOnly`). */
   readableDir?: string;
   /**
-   * When `true`, the helper must run read-only. Workers forwards it to Engines
-   * as `--read-only` and refuses to run the task (`engine_unsupported`,
-   * `READ_ONLY_UNSUPPORTED`) unless Engines guarantees the lock.
+   * Si vale `true`, el ayudante debe correr en solo lectura. Workers lo envía a Engines como `--read-only` y
+   * rechaza la tarea (`engine_unsupported`, `READ_ONLY_UNSUPPORTED`) salvo que Engines garantice el bloqueo.
    */
   readOnly?: boolean;
+  /** Modelo solicitado; si falta, Engines aplica su valor predeterminado para el asistente. */
   model?: string;
+  /** Nivel de razonamiento solicitado o `null` cuando la tarea no fija ninguno. */
   reasoningLevel: ReasoningLevel | null;
+  /** Tiempo máximo de ejecución de la tarea, en milisegundos. */
   timeoutMs: number;
 }
 
+/** Documento de una corrida ya validado, con la ruta de Engines, el tope de salida y las tareas en orden. */
 export interface RunInput {
+  /** Ruta o nombre del ejecutable de Engines. */
   enginesBin: string;
+  /** Máximo de bytes que se conservan de stdout y stderr por tarea. */
   maxOutputBytes: number;
+  /** Tareas del lote en el orden en que deben ejecutarse. */
   tasks: TaskSpec[];
 }
 
-/** Why a task failed without finishing. `engine_unsupported` covers HEADLESS_UNSUPPORTED, REASONING_LEVEL_UNSUPPORTED, READ_ONLY_UNSUPPORTED and a read-only lock Workers could not confirm; input errors from Engines go to `generic_error`. */
+/** Motivo por el que una tarea falló sin completarse; `engine_unsupported` cubre `HEADLESS_UNSUPPORTED`, `REASONING_LEVEL_UNSUPPORTED`, `READ_ONLY_UNSUPPORTED` y un bloqueo de solo lectura que Workers no pudo confirmar, mientras los errores de entrada de Engines van a `generic_error`. */
 export type TaskFailureReason =
   | "timeout"
   | "engine_unsupported"
   | "spawn_error"
   | "generic_error";
 
+/** Evento que Workers emite: inicio o resultado de una tarea, cuota agotada, resumen del lote o error fatal previo al lote. */
 export type TaskEvent =
   | { event: "task_started"; taskId: string; agentId: string; startedAt: string }
   | {
@@ -96,9 +109,17 @@ export type TaskEvent =
 export const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_TASK_TIMEOUT_MS = 10 * 60 * 1000;
 
+/** Error de validación que identifica un documento de entrada roto antes de iniciar ninguna tarea. */
 export class InvalidInputError extends Error {}
 
-/** Parses the stdin document into a RunInput; throws InvalidInputError for broken JSON or any field with the wrong shape, before any task runs. */
+/**
+ * Convierte el documento de stdin en un {@link RunInput}; aplica los topes predeterminados y valida todos los
+ * campos antes de iniciar una tarea.
+ *
+ * @param raw Texto JSON completo recibido por stdin.
+ * @returns La entrada validada, con `maxOutputBytes`, `reasoningLevel` y `timeoutMs` ya normalizados.
+ * @throws {@link InvalidInputError} si el JSON está roto, la raíz no es un objeto, falta `enginesBin` o `tasks`, un tope no es positivo o alguna tarea tiene un campo inválido.
+ */
 export function parseRunInput(raw: string): RunInput {
   let data: unknown;
   try {
@@ -131,9 +152,13 @@ export function parseRunInput(raw: string): RunInput {
 }
 
 /**
- * Validates one entry of `tasks` and copies the fields Workers knows about.
- * Throws {@link InvalidInputError} naming `tasks[index]` when a field has the
- * wrong shape; the whole batch then fails before any task runs.
+ * Valida una entrada de `tasks` y copia solo los campos que Workers conoce; los opcionales de texto con otro
+ * tipo se omiten, pero un `readOnly` inválido se rechaza para no perder el bloqueo en silencio.
+ *
+ * @param raw Valor sin validar de la entrada de `tasks`.
+ * @param index Posición de la tarea, usada para nombrar con precisión el campo inválido.
+ * @returns La tarea normalizada, con valores predeterminados para el tiempo límite y el nivel de razonamiento.
+ * @throws {@link InvalidInputError} con `tasks[index]` si la entrada no es un objeto, falta un texto obligatorio, el tiempo no es positivo, el nivel no está permitido o `readOnly` no es booleano.
  */
 function parseTask(raw: unknown, index: number): TaskSpec {
   if (typeof raw !== "object" || raw === null) {
@@ -162,9 +187,8 @@ function parseTask(raw: unknown, index: number): TaskSpec {
     reasoningLevel = t.reasoningLevel as ReasoningLevel;
   }
 
-  // Unlike `readableDir`/`model`, a wrong `readOnly` is never dropped: a
-  // silently ignored lock would run a helper that was meant to be read-only
-  // with full access.
+  // A diferencia de `readableDir` y `model`, un `readOnly` erróneo nunca se descarta: ignorar el bloqueo en
+  // silencio ejecutaría con acceso completo un ayudante que debía limitarse a solo lectura.
   if (t.readOnly !== undefined && typeof t.readOnly !== "boolean") {
     throw new InvalidInputError(`tasks[${index}].readOnly must be true, false or absent`);
   }

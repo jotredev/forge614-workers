@@ -1,49 +1,63 @@
+/**
+ * Cliente de Engines: construye llamadas sin interfaz (`headless`) para obtener el comando de una tarea y
+ * consulta si un asistente garantiza el bloqueo de solo lectura. `src/runner.ts` usa ambas operaciones y
+ * `src/engines-client.test.ts` las prueba contra el ejecutable real y contra respuestas inválidas.
+ */
 import type { ReasoningLevel } from "./types";
 
+/** Comando que Engines resolvió para ejecutar una tarea y la forma en que debe recibir su instrucción. */
 export interface HeadlessCommand {
+  /** Ruta o nombre del programa que Workers debe lanzar. */
   command: string;
+  /** Argumentos del programa, en el orden exacto que Engines determinó. */
   args: string[];
+  /** Si vale `true`, el programa espera que la instrucción llegue por stdin (entrada estándar). */
   stdin?: boolean;
 }
 
-/** What Workers asks Engines' `headless` command to build. */
+/** Datos que Workers entrega al comando `headless` de Engines para construir la ejecución de una tarea. */
 export interface ResolveHeadlessOptions {
+  /** Ruta o nombre del ejecutable de Engines que se invoca. */
   enginesBin: string;
+  /** Identificador del asistente cuyo comando se solicita. */
   agentId: string;
+  /** Ejecutable del asistente que Engines debe incorporar al comando resuelto. */
   executable: string;
+  /** Instrucción de la tarea; no se pasa a Engines y luego se entrega al asistente por stdin. */
   prompt: string;
-  /** Extra folder the helper may access, forwarded to Engines as `--readable-dir`. It grants access; it does not make anything read-only (see `readOnly`). */
+  /** Carpeta adicional a la que puede acceder el ayudante, enviada como `--readable-dir`; concede acceso, pero no impone solo lectura (véase `readOnly`). */
   readableDir?: string;
-  /** When `true`, `--read-only` is added so Engines builds the read-only lock. */
+  /** Si vale `true`, se agrega `--read-only` para que Engines construya el bloqueo de solo lectura. */
   readOnly?: boolean;
+  /** Modelo solicitado; si falta, Engines elige el predeterminado del asistente. */
   model?: string;
+  /** Nivel de razonamiento solicitado o `null` cuando la tarea no fija ninguno. */
   reasoningLevel?: ReasoningLevel | null;
 }
 
-/** Outcome of {@link resolveHeadlessCommand}: the command to run, or Engines' own rejection code and message. */
+/** Resultado de {@link resolveHeadlessCommand}: el comando ejecutable o el código y mensaje con que Engines rechazó la solicitud. */
 export type ResolveHeadlessResult =
   | { ok: true; command: HeadlessCommand }
   | { ok: false; code: string; message: string };
 
 /**
- * Asks Engines for the command that runs one task headlessly (`headless`).
- * Never throws for an answer Engines gave: a rejection comes back as
- * `{ ok: false, code, message }` with Engines' own code
- * (e.g. `UNKNOWN_AGENT`, `INVALID_REASONING_LEVEL`, `READ_ONLY_UNSUPPORTED`),
- * and an unreadable answer as `ENGINES_RESPONSE_INVALID`.
+ * Pide a Engines el comando para ejecutar una tarea sin interfaz (`headless`). Una respuesta de rechazo nunca
+ * lanza: devuelve `{ ok: false, code, message }` con el código de Engines, por ejemplo `UNKNOWN_AGENT`,
+ * `INVALID_REASONING_LEVEL` o `READ_ONLY_UNSUPPORTED`; una respuesta ilegible devuelve
+ * `ENGINES_RESPONSE_INVALID` con los primeros 200 caracteres de stdout (salida normal).
+ *
+ * @param options Ejecutable de Engines y datos de la tarea usados para formar sus argumentos.
+ * @returns El comando resuelto o el rechazo normalizado con el código y mensaje correspondientes.
+ * @throws El error de lanzamiento o de lectura si no se puede iniciar Engines o leer la salida del proceso; las respuestas que Engines sí entrega se convierten en resultados y no lanzan.
  */
 export async function resolveHeadlessCommand(
   options: ResolveHeadlessOptions
 ): Promise<ResolveHeadlessResult> {
-  // The prompt is deliberately NOT passed as a `--prompt` CLI arg: Workers
-  // always requests `--stdin-prompt`, and forge614-engines fully ignores
-  // `--prompt`'s value when `--stdin-prompt` is also passed (verified live:
-  // output is byte-identical with or without it). Passing it anyway would
-  // (a) risk E2BIG from Bun.spawn for prompts near/over the OS ARG_MAX
-  // (as low as ~128KiB on Linux), crashing the whole batch, and (b) leave
-  // the prompt visible in forge614-engines's own argv (e.g. `ps` output)
-  // for the duration of this invocation, defeating the point of
-  // `--stdin-prompt` in the first place.
+  // El prompt no se pasa como argumento `--prompt`: Workers siempre pide `--stdin-prompt` y Engines ignora por
+  // completo el valor de `--prompt` cuando ambos aparecen (se comprobó que la salida es idéntica byte a byte).
+  // Pasarlo también arriesgaría un error `E2BIG` para instrucciones cercanas a `ARG_MAX` (límite de bytes de los
+  // argumentos del sistema operativo, que puede ser de unos 128 KiB) y dejaría el contenido visible en `argv`
+  // (lista de argumentos del proceso) durante la llamada. Por eso la instrucción viaja después al asistente por stdin.
   const args = [
     "headless",
     "--agent", options.agentId,
@@ -55,8 +69,8 @@ export async function resolveHeadlessCommand(
   if (options.readableDir) args.push("--readable-dir", options.readableDir);
   if (options.readOnly) args.push("--read-only");
 
-  // stderr is ignored (not piped) so a chatty child process can never fill the
-  // OS pipe buffer and deadlock while we're only awaiting stdout/exited.
+  // stderr (salida de errores) se ignora, sin abrir una tubería, para que un proceso que escriba mucho allí no
+  // llene el búfer del sistema y quede bloqueado mientras Workers solo espera stdout y la terminación.
   const proc = Bun.spawn([options.enginesBin, ...args], { stdout: "pipe", stderr: "ignore" });
   const stdout = await new Response(proc.stdout).text();
   await proc.exited;
@@ -89,23 +103,23 @@ export async function resolveHeadlessCommand(
   return { ok: true, command: parsed.headless };
 }
 
-/** Shape of {@link resolveHeadlessCommand}, so the runner can take a double in tests. */
+/** Firma de {@link resolveHeadlessCommand}; permite que el ejecutor reciba un doble en las pruebas. */
 export type ResolveHeadlessCommand =typeof resolveHeadlessCommand;
 
 /**
- * Asks Engines (`capabilities --agent <id>`) whether it guarantees the
- * read-only lock for this agent: resolves `true` only when the answer is JSON
- * with `supportsReadOnly === true`. Every other outcome resolves `false`
- * instead of throwing: the field missing (an Engines older than 1.17.0, which
- * would also ignore `--read-only` without an error), `false`, an Engines error
- * such as an unknown agent, output that is not JSON, or a binary that cannot
- * be launched. A lock that cannot be confirmed counts as not guaranteed.
- * It has no timeout of its own: a capabilities call that never answers blocks
- * the batch before any command runs.
+ * Pregunta a Engines (`capabilities --agent <id>`) si garantiza el bloqueo de solo lectura para un asistente.
+ * Solo responde `true` si el JSON trae `supportsReadOnly === true`; un campo ausente, `false`, un error de
+ * Engines, una salida que no sea JSON o un ejecutable que no arranque producen `false` en vez de lanzar. Así,
+ * un bloqueo que no se puede confirmar se considera no garantizado. La consulta no tiene tiempo límite propio:
+ * si nunca responde, detiene el lote antes de pedir ningún comando.
+ *
+ * @param enginesBin Ruta o nombre del ejecutable de Engines que se consulta.
+ * @param agentId Identificador del asistente cuya capacidad de solo lectura se comprueba.
+ * @returns `true` solo ante una respuesta JSON con `supportsReadOnly` exactamente en `true`; `false` en cualquier otro caso.
  */
 export async function engineSupportsReadOnly(enginesBin: string, agentId: string): Promise<boolean> {
   try {
-    // stderr is ignored for the same reason as in resolveHeadlessCommand.
+    // stderr se ignora por la misma razón que en `resolveHeadlessCommand`: evita llenar una tubería que no se leería.
     const proc = Bun.spawn([enginesBin, "capabilities", "--agent", agentId], {
       stdout: "pipe",
       stderr: "ignore",
@@ -123,5 +137,5 @@ export async function engineSupportsReadOnly(enginesBin: string, agentId: string
   }
 }
 
-/** Shape of {@link engineSupportsReadOnly}, so the runner can take a double in tests. */
+/** Firma de {@link engineSupportsReadOnly}; permite que el ejecutor reciba un doble en las pruebas. */
 export type EngineSupportsReadOnly = typeof engineSupportsReadOnly;

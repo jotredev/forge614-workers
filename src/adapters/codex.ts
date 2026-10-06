@@ -1,9 +1,9 @@
+/** Adaptador de `codex`: reconoce sus mensajes de cuota sin distinguir mayúsculas y permite ejecutarlo en la carpeta temporal de Workers. Lo registra `registry.ts` y lo prueba `codex.test.ts`. */
 import type { EngineAdapter } from "./contract";
 
-// Codex CLI surfaces quota/rate-limit failures with one of these substrings
-// in stderr or the start of stdout. Reconfirm the exact text against the
-// installed CLI version per docs/adding-a-new-engine-adapter.md before
-// relying on this in production.
+// La interfaz de línea de comandos muestra los fallos de cuota o frecuencia con una de estas subcadenas en
+// stderr o al inicio de stdout. Antes de depender de ellas en producción, se vuelven a confirmar contra la
+// versión instalada como indica `docs/adding-a-new-engine-adapter.md`.
 const QUOTA_PATTERNS = ["usage limit", "rate limit"];
 
 export const codexAdapter: EngineAdapter = {
@@ -18,12 +18,9 @@ export const codexAdapter: EngineAdapter = {
     return { matched: false };
   },
   extraArgs() {
-    // Codex refuses to run in a directory it doesn't recognize as a trusted
-    // git repo. Workers always runs each task in a fresh, isolated,
-    // non-repo temp directory by design, so this flag is required on every
-    // invocation — confirmed empirically: without it, Codex exits with
-    // "Not inside a trusted directory and --skip-git-repo-check was not
-    // specified."
+    // El asistente rechaza una carpeta que no reconoce como repositorio confiable. Workers ejecuta cada tarea
+    // en una carpeta temporal nueva que no es repositorio, por lo que esta bandera se necesita siempre; se
+    // comprobó que sin ella el proceso sale pidiendo `--skip-git-repo-check`.
     return ["--skip-git-repo-check"];
   },
 };
