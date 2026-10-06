@@ -18,7 +18,7 @@ Ejemplo de tarea de solo lectura: `{"id":"task-2","agentId":"codex","executable"
 
 Cada línea de stdout es un objeto NDJSON. `task_completed` incluye `exitCode`, duración, texto capturado, tamaños reales y flags de truncamiento. `task_failed` añade `reason`: `timeout`, `engine_unsupported`, `spawn_error` o `generic_error`. `quota_exhausted` incluye motor y patrón coincidente. `run_completed` resume `totalTasks`, `completed`, `failed`, `notStarted`, `pausedByQuota` y duración. `fatal_error` no tiene `run_completed`.
 
-Los tamaños son los bytes observados, incluso cuando el texto fue truncado. La detección de cuota examina stderr completo y solo los primeros 4096 bytes de stdout, independientemente del límite de captura.
+Los tamaños son los bytes observados, incluso cuando el texto fue truncado. La detección de cuota solo ve lo capturado: examina el stderr capturado (como mucho `maxOutputBytes` bytes) y los primeros 4096 bytes del stdout capturado (menos si `maxOutputBytes` es menor que 4096), no la salida completa del proceso.
 
 ## Resolución segura
 

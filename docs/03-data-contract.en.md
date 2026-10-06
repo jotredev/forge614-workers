@@ -18,7 +18,7 @@ Read-only task example: `{"id":"task-2","agentId":"codex","executable":"/usr/loc
 
 Each stdout line is an NDJSON object. `task_completed` includes `exitCode`, duration, captured text, true sizes, and truncation flags. `task_failed` adds `reason`: `timeout`, `engine_unsupported`, `spawn_error`, or `generic_error`. `quota_exhausted` includes the engine and matched pattern. `run_completed` summarizes `totalTasks`, `completed`, `failed`, `notStarted`, `pausedByQuota`, and duration. `fatal_error` has no `run_completed`.
 
-Sizes are observed byte counts even when text is truncated. Quota detection examines full stderr and only the first 4096 bytes of stdout, independently of the capture limit.
+Sizes are observed byte counts even when text is truncated. Quota detection only sees what was captured: it examines the captured stderr (at most `maxOutputBytes` bytes) and the first 4096 bytes of the captured stdout (fewer if `maxOutputBytes` is below 4096), not the process's full output.
 
 ## Safe resolution
 

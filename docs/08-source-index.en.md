@@ -41,4 +41,5 @@
 - `docs/10-installer.md` and `docs/10-installer.en.md`: installer, `update`, and verification/release workflows.
 - `docs/11-troubleshooting.md` and `docs/11-troubleshooting.en.md`: codes, messages, and diagnostic actions.
 - `docs/12-glossary.md` and `docs/12-glossary.en.md`: Workers contract vocabulary.
-- `docs/notion-map.json`: local ↔ Notion map with the sha256 fingerprint of each manual.
+- `CONTRACT.md` and `CONTRACT.en.md`: public Workers contract (commands, exit codes, failure reasons).
+- `docs/notion-map.json`: local ↔ Notion map with the sha256 fingerprint of each manual 00–08 (09–12 and `CONTRACT.md` are not listed yet).
