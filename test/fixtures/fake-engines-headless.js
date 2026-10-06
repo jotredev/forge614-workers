@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
-// Stands in for `forge614-engines headless` in the end-to-end test, so the
-// test doesn't depend on forge614-engines being installed. Always resolves
-// successfully and honors --stdin-prompt by leaving the prompt out of args.
+// Simula `forge614-engines headless` para las dos pruebas de punta a punta de `test/e2e.test.ts` (éxito y cuota): siempre responde
+// que el comando es el valor de `--executable`, sin argumentos y con `stdin: true`, así que el prompt nunca viaja en los argumentos.
+// Cualquier otro subcomando (por ejemplo `capabilities`) devuelve `UNKNOWN_COMMAND` y sale con 1; así la prueba no depende de tener Engines instalado.
 const args = Bun.argv.slice(2);
+// Devuelve el valor que sigue a la bandera dada en los argumentos, o `undefined` si la bandera no está.
 function flag(name) {
   const i = args.indexOf(name);
   return i === -1 ? undefined : args[i + 1];

@@ -1,7 +1,8 @@
 /**
- * Exercises `scripts/install.sh` end to end in disposable sandboxes: a temporary HOME, a loopback
- * server standing in for the GitHub release API, and local doubles for Forge614 Engines and its
- * installer. The real HOME, the real `~/.forge614` and the network are never touched.
+ * Prueba `scripts/install.sh` de punta a punta en entornos desechables (sandboxes): un HOME temporal, un servidor
+ * en loopback (dirección local `127.0.0.1`, que no sale de la máquina) que hace de API de releases (versiones
+ * publicadas) de GitHub, y dobles locales (programas de mentira) de Forge614 Engines y de su instalador. Nunca
+ * toca el HOME real, el `~/.forge614` real ni la red.
  */
 import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
@@ -17,26 +18,39 @@ const testReleaseBaseUrl = "FORGE614_WORKERS_TEST_RELEASE_BASE_URL";
 const testMode = "FORGE614_WORKERS_INSTALLER_TEST";
 const enginesInstallerTestUrl = "FORGE614_WORKERS_ENGINES_INSTALLER_TEST_URL";
 
-/** Describes how a fake Forge614 Engines behaves: its version and whether it guarantees the read-only lock. */
+/** Describe cómo se porta un Forge614 Engines de mentira: qué versión dice tener y si garantiza el bloqueo de solo lectura. */
 interface FakeEngines {
+  /** Versión que imprime `--version`, por ejemplo `1.17.0` (la mínima que acepta el instalador). */
   version: string;
+  /** Valor de `supportsReadOnly` que devuelve `capabilities` para claude-code. */
   supportsReadOnly: boolean;
 }
 
 const compatibleEngines: FakeEngines = { version: "1.17.0", supportsReadOnly: true };
 
+// Después de cada prueba se borran las carpetas temporales que esa prueba registró; `splice(0)` vacía la lista a la vez que la devuelve.
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { force: true, recursive: true });
 });
 
-/** Creates a disposable directory removed after the test. */
+/**
+ * Crea una carpeta temporal nueva y la anota para que `afterEach` la borre al terminar la prueba.
+ *
+ * @returns La ruta absoluta de la carpeta creada dentro de la carpeta temporal del sistema.
+ */
 function temporaryDirectory(): string {
   const directory = mkdtempSync(join(tmpdir(), "forge614-workers-installer-"));
   temporaryDirectories.push(directory);
   return directory;
 }
 
-/** Gives the release artifact name of the machine running the tests. */
+/**
+ * Da el nombre del binario publicado que corresponde a la máquina que corre las pruebas, con la misma tabla de
+ * sistema y arquitectura que usa `scripts/install.sh`.
+ *
+ * @returns Uno de los cuatro nombres `forge614-workers-<sistema>-<arquitectura>` (macOS o Linux, x64 o arm64).
+ * @throws Error («Unsupported test host: <sistema>/<arquitectura>») si la máquina no es ninguna de esas cuatro.
+ */
 function targetArtifact(): string {
   const target = `${process.platform}/${process.arch}`;
   const artifacts: Record<string, string> = {
@@ -50,12 +64,23 @@ function targetArtifact(): string {
   return artifact;
 }
 
-/** Computes the SHA-256 of a file as lowercase hexadecimal. */
+/**
+ * Calcula la huella SHA-256 (un resumen del contenido: cambia si cambia un solo byte) de un archivo.
+ *
+ * @param path Ruta del archivo que se resume.
+ * @returns La huella en hexadecimal y minúsculas, como la escribe `SHA256SUMS`.
+ */
 function sha256(path: string): string {
   return new Bun.CryptoHasher("sha256").update(readFileSync(path)).digest("hex");
 }
 
-/** Writes the script of a fake `forge614-engines` that answers only `--version` and `capabilities`. */
+/**
+ * Arma el texto del script de un `forge614-engines` de mentira que solo responde a `--version` y a `capabilities`;
+ * cualquier otro argumento sale con código 64.
+ *
+ * @param engines Versión y soporte de solo lectura que el script debe declarar.
+ * @returns El contenido del script de bash, listo para guardarse en un archivo.
+ */
 function fakeEnginesScript(engines: FakeEngines): string {
   return [
     "#!/usr/bin/env bash",
@@ -68,7 +93,14 @@ function fakeEnginesScript(engines: FakeEngines): string {
   ].join("\n");
 }
 
-/** Places a fake Engines where the installer looks for it inside `home`. */
+/**
+ * Guarda un Engines de mentira en `<home>/.forge614/engines/bin/forge614-engines`, que es donde el instalador lo
+ * busca cuando no hay `FORGE614_HOME`, y lo hace ejecutable (permisos 755).
+ *
+ * @param home Carpeta que hace de HOME en la prueba.
+ * @param engines Versión y soporte de solo lectura que declara ese Engines.
+ * @returns La ruta del script que se escribió.
+ */
 function installFakeEngines(home: string, engines: FakeEngines): string {
   const path = join(home, ".forge614", "engines", "bin", "forge614-engines");
   mkdirSync(dirname(path), { recursive: true });
@@ -78,8 +110,14 @@ function installFakeEngines(home: string, engines: FakeEngines): string {
 }
 
 /**
- * Writes a stand-in for the Engines installer. It records each run in `marker` and, unless `exitCode`
- * is non-zero, leaves a fake Engines (described by `installs`) where the real one would go.
+ * Escribe un doble del instalador de Engines: un script que anota `ran` en `marker` cada vez que corre y, salvo que
+ * `exitCode` sea distinto de cero, deja un Engines de mentira (el que describe `installs`) donde lo dejaría el real,
+ * en `$FORGE614_HOME/engines/bin` o en `$HOME/.forge614/engines/bin`. Con `exitCode` distinto de cero sale con ese código sin instalar nada.
+ *
+ * @param path Dónde se guarda el script del doble.
+ * @param marker Archivo donde el doble anota cada ejecución; `enginesInstallerRuns` cuenta sus líneas.
+ * @param installs Versión y soporte de solo lectura del Engines que el doble deja instalado.
+ * @param exitCode Código con el que el doble termina; 0 por defecto.
  */
 function writeEnginesInstaller(path: string, marker: string, installs: FakeEngines, exitCode = 0): void {
   writeFileSync(path, [
@@ -97,23 +135,38 @@ function writeEnginesInstaller(path: string, marker: string, installs: FakeEngin
   ].join("\n"));
 }
 
-/** Options of one installer run. */
+/** Opciones de una corrida del instalador: qué entorno se le arma. */
 interface RunOptions {
+  /** Valor de la variable `HOME` con la que corre el instalador; una carpeta temporal. */
   home: string;
+  /** Dirección base del servidor de releases de mentira; el instalador la recibe en `FORGE614_WORKERS_TEST_RELEASE_BASE_URL`. */
   releaseBaseUrl: string;
+  /** Ruta del doble del instalador de Engines; se entrega al instalador como una dirección `file://`. Sin ella no se define esa variable. */
   enginesInstaller?: string;
+  /** Valor de la variable `SHELL`; `/bin/zsh` si no se indica. */
   shell?: string;
+  /** Si es `false`, no se define la marca de pruebas `FORGE614_WORKERS_INSTALLER_TEST`; con cualquier otro valor se define como `1`. */
   includeTestSentinel?: boolean;
+  /** Valor de `FORGE614_HOME`; sin él la variable se quita del entorno para que valga la carpeta por defecto. */
   forgeHome?: string;
 }
 
-/** Runs the installer with a sandboxed environment (temporary HOME, FORGE614_HOME only when `forgeHome` is given, test endpoints). */
+/**
+ * Corre `scripts/install.sh` con un entorno aislado: HOME temporal, `FORGE614_HOME` solo si `forgeHome` lo pide y
+ * los puntos de entrada de pruebas. Parte del entorno del proceso actual, pero deja fuera cualquier `FORGE614_HOME`
+ * y dirección de instalador de Engines heredados, para que la prueba no dependa del equipo donde corre.
+ *
+ * @param args Argumentos que se le pasan al instalador, por ejemplo `["--force"]`.
+ * @param options Entorno de la corrida (véase `RunOptions`).
+ * @returns El código de salida del instalador y todo lo que escribió en stdout y stderr.
+ */
 async function runInstaller(args: string[], options: RunOptions): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const env: Record<string, string | undefined> = { ...process.env, HOME: options.home, SHELL: options.shell ?? "/bin/zsh" };
   delete env.FORGE614_HOME;
   if (options.forgeHome !== undefined) env.FORGE614_HOME = options.forgeHome;
   delete env[enginesInstallerTestUrl];
   env[testReleaseBaseUrl] = options.releaseBaseUrl;
+  // La marca de pruebas se quita solo cuando la prueba pide `false`; en los demás casos queda puesta.
   if (options.includeTestSentinel === false) delete env[testMode];
   else env[testMode] = "1";
   if (options.enginesInstaller) env[enginesInstallerTestUrl] = `file://${options.enginesInstaller}`;
@@ -126,8 +179,13 @@ async function runInstaller(args: string[], options: RunOptions): Promise<{ exit
 }
 
 /**
- * Starts a loopback server that mimics the GitHub release API for one release. Paths under `/mismatch/`
- * publish a wrong digest and paths under `/unsafe-assets/` point the assets at a non-loopback HTTPS URL.
+ * Levanta un servidor en loopback que imita la API de releases de GitHub para una sola versión. Las rutas que
+ * empiezan con `/mismatch/` publican una huella equivocada (64 ceros) y las que empiezan con `/unsafe-assets/`
+ * hacen que los archivos apunten a una dirección HTTPS que no es del servidor de pruebas.
+ *
+ * @param artifact Nombre del binario de la plataforma, que el servidor anuncia junto a `SHA256SUMS`.
+ * @param fixturePath Archivo que se entrega como binario y del que se calcula la huella.
+ * @returns El servidor de Bun, ya escuchando en `127.0.0.1` con un puerto libre elegido por el sistema.
  */
 function fixtureReleaseServer(artifact: string, fixturePath: string) {
   const digest = sha256(fixturePath);
@@ -136,11 +194,13 @@ function fixtureReleaseServer(artifact: string, fixturePath: string) {
     port: 0,
     fetch(request) {
       const url = new URL(request.url);
+      // La ruta decide el escenario: `/mismatch/...` cambia la huella y `/unsafe-assets/...` cambia hacia dónde apuntan los archivos.
       const mismatch = url.pathname.startsWith("/mismatch/");
       const unsafeAssets = url.pathname.startsWith("/unsafe-assets/");
       const prefix = mismatch ? "/mismatch" : "/good";
       const baseUrl = `http://${url.host}${prefix}`;
       const assetBaseUrl = unsafeAssets ? "https://127.0.0.1:1" : baseUrl;
+      // Metadatos de la versión: los pide el instalador tanto para `latest` como para una etiqueta (`/releases/tags/...`).
       if (url.pathname.endsWith("/releases/latest") || url.pathname.includes("/releases/tags/")) {
         return Response.json({
           tag_name: releaseTag,
@@ -150,6 +210,7 @@ function fixtureReleaseServer(artifact: string, fixturePath: string) {
           ],
         });
       }
+      // Archivo de sumas: una línea `<huella>  <nombre>`; con `/mismatch/` la huella son 64 ceros y nunca coincide.
       if (url.pathname.endsWith("/download/SHA256SUMS")) {
         return new Response(`${mismatch ? "0".repeat(64) : digest}  ${artifact}\n`);
       }
@@ -159,7 +220,12 @@ function fixtureReleaseServer(artifact: string, fixturePath: string) {
   });
 }
 
-/** Builds a sandbox: a root folder, a fake HOME, the fixture binary and a running release server. */
+/**
+ * Arma un entorno de prueba completo: una carpeta raíz, un HOME falso dentro de ella, el binario de mentira, el
+ * archivo donde el doble del instalador de Engines anota sus corridas y un servidor de releases ya funcionando.
+ *
+ * @returns La carpeta raíz, el HOME, la ruta del marcador, el servidor (que la prueba debe detener), `base` (la dirección de releases correcta, bajo `/good`) y `forge` (la carpeta `<home>/.forge614` donde debería instalarse todo).
+ */
 function sandbox() {
   const root = temporaryDirectory();
   const home = join(root, "home");
@@ -171,12 +237,21 @@ function sandbox() {
   return { root, home, marker, server, base: `${server.url}good`, forge: join(home, ".forge614") };
 }
 
-/** Counts how many times the Engines installer double ran. */
+/**
+ * Cuenta cuántas veces corrió el doble del instalador de Engines, que anota una línea por corrida.
+ *
+ * @param marker Archivo donde el doble anota sus corridas; puede no existir si nunca corrió.
+ * @returns El número de líneas no vacías del archivo, o 0 si no existe.
+ */
 function enginesInstallerRuns(marker: string): number {
   return existsSync(marker) ? readFileSync(marker, "utf8").split("\n").filter(Boolean).length : 0;
 }
 
-/** A clean install puts the binary in a version folder and links it as the active command. */
+/**
+ * Comprueba la instalación limpia, con un Engines compatible ya puesto: el binario queda en la carpeta de su versión
+ * con permisos 755, el comando activo es un enlace simbólico (un acceso directo del sistema de archivos) hacia él, y
+ * `workers` y `workers/bin` quedan con permisos 700. Importa porque es el camino normal de quien instala por primera vez.
+ */
 test("clean install: version folder, active link and locked-down folders", async () => {
   const { home, forge, server, base } = sandbox();
   installFakeEngines(home, compatibleEngines);
@@ -198,7 +273,10 @@ test("clean install: version folder, active link and locked-down folders", async
   }
 });
 
-/** Installing a release by tag works the same as `latest`. */
+/**
+ * Comprueba que `--version v1.0.0` pide la versión por su etiqueta (la ruta `/releases/tags/...` del servidor) y deja
+ * instalada esa carpeta de versión. Importa porque es la única forma de fijar una versión en vez de tomar la última.
+ */
 test("--version selects a release by tag", async () => {
   const { home, forge, server, base } = sandbox();
   installFakeEngines(home, compatibleEngines);
@@ -212,7 +290,10 @@ test("--version selects a release by tag", async () => {
   }
 });
 
-/** Running the same version again without --force changes nothing and says it is already active. */
+/**
+ * Instala, cambia a mano el binario por un script marcado y vuelve a correr sin `--force`: comprueba que sale con 0,
+ * dice `already active` y deja el binario marcado sin tocar. Importa porque repetir el comando no debe pisar la instalación activa.
+ */
 test("reinstalling the same version without --force reports it is already active", async () => {
   const { home, forge, server, base } = sandbox();
   installFakeEngines(home, compatibleEngines);
@@ -231,7 +312,11 @@ test("reinstalling the same version without --force reports it is already active
   }
 });
 
-/** --force reinstalls the same version over whatever is there. */
+/**
+ * Instala, cambia el binario por un script `tampered` (alterado) y vuelve a correr con `--force`: comprueba que sale con 0,
+ * imprime `Installed Forge614 Workers`, restaura el contenido original y el enlace sigue apuntando a ese comando.
+ * Importa porque `--force` es lo que usa `update` para reinstalar encima de cualquier cosa.
+ */
 test("--force replaces the installed binary of the same version", async () => {
   const { home, forge, server, base } = sandbox();
   installFakeEngines(home, compatibleEngines);
@@ -251,7 +336,11 @@ test("--force replaces the installed binary of the same version", async () => {
   }
 });
 
-/** A missing Engines is installed first and checked again before Workers is placed. */
+/**
+ * Sin ningún Engines instalado y con un doble de su instalador que deja uno compatible: comprueba que el doble corre
+ * exactamente una vez, que el Engines queda en `engines/bin` y que Workers se instala después. Importa porque
+ * Workers no puede quedar instalado sin el Engines del que depende.
+ */
 test("installs Engines when it is missing, checks it again and then installs Workers", async () => {
   const { root, home, forge, marker, server, base } = sandbox();
   const enginesInstaller = join(root, "engines-install.sh");
@@ -268,7 +357,10 @@ test("installs Engines when it is missing, checks it again and then installs Wor
   }
 });
 
-/** An Engines that is too old is replaced by the latest one when its installer fixes it. */
+/**
+ * Con un Engines 1.16.0 ya instalado y un doble que deja 1.17.0: comprueba que el doble corre una vez, que el Engines
+ * del disco pasa a decir `1.17.0` y que Workers se instala. Importa porque una versión instalada pero antigua debe actualizarse.
+ */
 test("replaces an Engines older than 1.17.0 when its installer fixes it", async () => {
   const { root, home, forge, marker, server, base } = sandbox();
   installFakeEngines(home, { version: "1.16.0", supportsReadOnly: true });
@@ -286,7 +378,11 @@ test("replaces an Engines older than 1.17.0 when its installer fixes it", async 
   }
 });
 
-/** If Engines is old or lacks the read-only lock and cannot be fixed, nothing of Workers is installed. */
+/**
+ * Prueba dos Engines que no sirven (versión 1.16.0, o 1.17.0 sin bloqueo de solo lectura) cuyo doble de instalador deja
+ * el mismo Engines inservible: comprueba que sale con error, que el doble corrió una vez, que el mensaje dice `Forge614 Workers was not installed`
+ * con el comando para instalar Engines, y que no se crea la carpeta `workers`. Importa porque nunca debe quedar Workers sin un Engines que garantice solo lectura.
+ */
 test.each([
   ["is older than 1.17.0", { version: "1.16.0", supportsReadOnly: true }],
   ["does not guarantee the read-only lock", { version: "1.17.0", supportsReadOnly: false }],
@@ -308,7 +404,11 @@ test.each([
   }
 });
 
-/** An Engines installer that fails leaves Workers untouched. */
+/**
+ * Sin Engines instalado y con un doble de su instalador que sale con código 1: comprueba que el instalador de Workers
+ * sale con error, dice `Forge614 Workers was not installed` y no crea la carpeta `workers`. Importa porque un fallo
+ * al instalar Engines debe detener todo, no dejar Workers a medias.
+ */
 test("installs nothing of Workers when the Engines installer fails", async () => {
   const { root, home, forge, marker, server, base } = sandbox();
   const enginesInstaller = join(root, "engines-install-fails.sh");
@@ -324,7 +424,11 @@ test("installs nothing of Workers when the Engines installer fails", async () =>
   }
 });
 
-/** A wrong digest stops everything: no Workers folder and no Engines installation either. */
+/**
+ * Con el servidor de la ruta `/mismatch` (que publica 64 ceros como huella): comprueba que sale con error, dice
+ * `Checksum verification failed`, el doble del instalador de Engines no corre y ni siquiera existe la carpeta
+ * `.forge614`. Importa porque la huella se verifica antes de instalar Engines y antes de crear nada en disco.
+ */
 test("a checksum mismatch installs nothing, not even Engines", async () => {
   const { root, home, forge, marker, server } = sandbox();
   const enginesInstaller = join(root, "engines-install.sh");
@@ -341,7 +445,12 @@ test("a checksum mismatch installs nothing, not even Engines", async () => {
   }
 });
 
-/** The installer never edits shell profiles or adds anything to PATH (Workers is an internal dependency). */
+/**
+ * Deja cinco archivos de perfil de shell (los que cargan zsh, bash y fish al abrir una terminal) con texto ajeno y
+ * corre el instalador con `--force` como zsh, bash y fish: comprueba que cada corrida sale con 0 y dice `not added to PATH`
+ * (PATH es la lista de carpetas donde la terminal busca programas), que los perfiles no cambian y que el HOME y `.forge614`
+ * contienen solo lo esperado. Importa porque Workers es una dependencia interna y no debe tocar el entorno del usuario.
+ */
 test("leaves the PATH and the shell profile files untouched", async () => {
   const { home, forge, server, base } = sandbox();
   installFakeEngines(home, compatibleEngines);
@@ -360,6 +469,7 @@ test("leaves the PATH and the shell profile files untouched", async () => {
     for (const profileFile of profileFiles) {
       expect(readFileSync(join(home, profileFile), "utf8")).toBe(`unrelated ${profileFile}\n`);
     }
+    // Lo único que debe haber en el HOME son los cinco perfiles (con `.config` que contiene el de fish) y `.forge614`.
     expect(readdirSync(home).sort()).toEqual([".bash_profile", ".bashrc", ".config", ".forge614", ".profile", ".zshrc"]);
     expect(readdirSync(forge).sort()).toEqual(["engines", "workers"]);
   } finally {
@@ -367,7 +477,11 @@ test("leaves the PATH and the shell profile files untouched", async () => {
   }
 });
 
-/** The layout already on the first Mac (an old version folder and a relative link) is taken over without writing through the link. */
+/**
+ * Prepara una instalación vieja (carpeta `0.9.0` y un enlace relativo `../0.9.0/forge614-workers`) y corre el instalador:
+ * comprueba que el enlace pasa a apuntar a la ruta absoluta de la versión nueva y que el binario viejo queda con su texto original.
+ * Importa porque el enlace se reemplaza, no se escribe a través de él, y la versión anterior se conserva.
+ */
 test("takes over an existing relative link and keeps the old version folder", async () => {
   const { home, forge, server, base } = sandbox();
   installFakeEngines(home, compatibleEngines);
@@ -387,7 +501,11 @@ test("takes over an existing relative link and keeps the old version folder", as
   }
 });
 
-/** A plain file in the place of the link is only replaced when --force asks for it. */
+/**
+ * Pone un archivo normal (no un enlace) en la ruta del comando activo: comprueba que sin `--force` el instalador falla,
+ * deja el archivo intacto y no crea la carpeta de la versión, y que con `--force` termina con 0 y lo convierte en enlace.
+ * Importa porque no se pisa en silencio un comando que el usuario puso a mano.
+ */
 test("refuses to replace a regular file at the active path without --force", async () => {
   const { home, forge, server, base } = sandbox();
   installFakeEngines(home, compatibleEngines);
@@ -408,7 +526,12 @@ test("refuses to replace a regular file at the active path without --force", asy
   }
 });
 
-/** The test-only release endpoint is refused unless it is loopback HTTP and the test sentinel is set. */
+/**
+ * Prueba tres direcciones de releases inaceptables: una HTTPS, una con usuario (`127.0.0.1:5432@localhost:1`, donde
+ * lo que parece el puerto es en realidad parte del usuario) y una de loopback sin la marca de pruebas. Comprueba que
+ * cada una sale con error y su mensaje (`test release endpoint must be a loopback HTTP URL` o `reserved for test fixtures`),
+ * y que no se crea `.forge614`. Importa porque este punto de entrada solo existe para pruebas y no debe poder usarse para engañar al instalador.
+ */
 test.each([
   ["an HTTPS endpoint", "https://127.0.0.1:1", true, "test release endpoint must be a loopback HTTP URL"],
   ["a userinfo endpoint", "http://127.0.0.1:5432@localhost:1", true, "test release endpoint must be a loopback HTTP URL"],
@@ -426,7 +549,11 @@ test.each([
   }
 });
 
-/** Release metadata that points assets outside loopback is refused in test mode. */
+/**
+ * Usa la ruta `/unsafe-assets` del servidor, cuyos metadatos apuntan los archivos a una dirección HTTPS que no es de
+ * loopback: comprueba que sale con error, dice `unsafe test fixture URL` y no crea `.forge614`. Importa porque en modo
+ * de pruebas los archivos a descargar también deben ser locales, no solo los metadatos.
+ */
 test("rejects non-loopback release asset URLs from a test fixture", async () => {
   const { home, forge, server } = sandbox();
   try {
@@ -440,7 +567,11 @@ test("rejects non-loopback release asset URLs from a test fixture", async () => 
   }
 });
 
-/** The Engines installer override only accepts local files. */
+/**
+ * Arma el entorno a mano, sin `runInstaller` (que siempre antepone `file://`), para pasar como instalador de Engines
+ * la dirección `https://example.invalid/install.sh` con Engines sin instalar: comprueba que sale con error, dice
+ * `must be a local file URL` y no crea `workers`. Importa porque la excepción de pruebas del instalador de Engines solo admite archivos locales.
+ */
 test("rejects a non-file Engines installer override", async () => {
   const { home, forge, server, base } = sandbox();
   try {
@@ -458,7 +589,10 @@ test("rejects a non-file Engines installer override", async () => {
   }
 });
 
-/** An absolute FORGE614_HOME moves the whole installation there and leaves `<home>/.forge614` alone. */
+/**
+ * Corre con `FORGE614_HOME` apuntando a una carpeta absoluta que ya trae un Engines compatible: comprueba que el binario
+ * y el enlace quedan allí y que no existe `<home>/.forge614`. Importa porque quien cambia `FORGE614_HOME` espera que todo vaya a esa carpeta y nada a la de por defecto.
+ */
 test("honours an absolute FORGE614_HOME instead of the default folder", async () => {
   const { root, home, forge, server, base } = sandbox();
   const forgeHome = join(root, "custom-forge-home");
@@ -480,7 +614,11 @@ test("honours an absolute FORGE614_HOME instead of the default folder", async ()
   }
 });
 
-/** A relative FORGE614_HOME is refused before anything is downloaded or created. */
+/**
+ * Corre con `FORGE614_HOME` igual a una ruta relativa: comprueba que sale con error y dice
+ * `FORGE614_HOME must be an absolute path.`, que no se crea ni `.forge614` ni la carpeta relativa (respecto al directorio
+ * actual) y que el HOME queda vacío. Importa porque una ruta relativa cambiaría de lugar según desde dónde se ejecute, y la validación ocurre antes de crear nada.
+ */
 test("rejects a relative FORGE614_HOME and creates nothing", async () => {
   const { home, forge, server, base } = sandbox();
   const relativeHome = "relative-forge614-home-for-test";
@@ -497,7 +635,10 @@ test("rejects a relative FORGE614_HOME and creates nothing", async () => {
   }
 });
 
-/** The help text runs without network and states the requirement. */
+/**
+ * Comprueba que `--help` sale con 0 e imprime `Usage: bash scripts/install.sh` y el requisito `1.17.0` de Engines.
+ * Importa porque la ayuda es lo que se lee antes de instalar y debe decir qué versión de Engines se necesita.
+ */
 test("--help prints the usage and exits 0", async () => {
   const { home, server, base } = sandbox();
   try {

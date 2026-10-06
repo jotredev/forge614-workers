@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// Stands in for a forge614-engines whose agent explicitly cannot guarantee
-// read-only execution: `capabilities` answers `supportsReadOnly: false`.
+// Simula un Engines cuyo asistente declara explícitamente que no garantiza el solo lectura: `capabilities` responde `supportsReadOnly: false`.
+// Lo usa la prueba «returns false when capabilities says supportsReadOnly is false» de `src/engines-client.test.ts`.
 console.log(
   JSON.stringify({
     schemaVersion: 1,

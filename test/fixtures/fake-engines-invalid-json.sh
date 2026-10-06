@@ -1,7 +1,5 @@
 #!/bin/sh
-# Test fixture: stands in for a misbehaving forge614-engines binary that
-# writes non-JSON to stdout and exits 0. Used to exercise the
-# ENGINES_RESPONSE_INVALID path in resolveHeadlessCommand without relying on
-# the real binary ever actually misbehaving.
+# Simula un Engines que se porta mal: escribe en stdout un texto que no es JSON y sale con 0. Lo usan `src/engines-client.test.ts` para
+# comprobar `ENGINES_RESPONSE_INVALID` en `resolveHeadlessCommand` y el `false` de `engineSupportsReadOnly`, sin depender de que el Engines real falle.
 echo "not valid json {{{ this is not parseable"
 exit 0
