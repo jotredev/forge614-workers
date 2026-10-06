@@ -9,7 +9,7 @@ interface AgentsListResponse {
   agents: { id: string; supportsHeadlessExec: boolean }[];
 }
 
-/** Agrupa la comprobación que evita publicar en Engines un asistente ejecutable sin sus reglas locales de cuota. */
+/** Agrupa la comprobación que hace fallar las pruebas de Workers cuando Engines publica un asistente ejecutable sin interfaz que no tiene adaptador registrado (y, por tanto, reglas de cuota). */
 describe("adapter registry completeness", () => {
   /** Consulta el ejecutable real y comprueba que cada asistente con `supportsHeadlessExec` aparezca en el registro de Workers. */
   test("every agent with supportsHeadlessExec has a registered adapter", async () => {

@@ -9,7 +9,7 @@ import {
 
 /** Agrupa los contratos de `parseRunInput`, desde el documento mínimo hasta cada forma inválida comprobada. */
 describe("parseRunInput", () => {
-  /** Comprueba que la entrada mínima conserva sus textos y recibe los topes, opcionales y nivel predeterminados. */
+  /** Comprueba que la entrada mínima conserva sus textos y recibe `maxOutputBytes` y `timeoutMs` predeterminados, `reasoningLevel: null` y `readableDir` y `model` sin valor. */
   test("parses a minimal valid input and applies defaults", () => {
     const input = parseRunInput(
       JSON.stringify({
@@ -218,7 +218,7 @@ describe("parseRunInput", () => {
     }
   );
 
-  /** Comprueba también el rechazo del valor literal `invalid`, para fijar el error general de nivel fuera de la lista. */
+  /** Comprueba que el texto `invalid` también lanza `InvalidInputError` como nivel de razonamiento; repite con otro valor la comprobación de `minimal` y `banana`. */
   test("throws InvalidInputError when reasoningLevel is an invalid value", () => {
     expect(() =>
       parseRunInput(

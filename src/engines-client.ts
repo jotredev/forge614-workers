@@ -11,7 +11,7 @@ export interface HeadlessCommand {
   command: string;
   /** Argumentos del programa, en el orden exacto que Engines determinó. */
   args: string[];
-  /** Si vale `true`, el programa espera que la instrucción llegue por stdin (entrada estándar). */
+  /** Si vale `true`, el programa espera la instrucción por stdin (entrada estándar). Workers no lee este campo: siempre manda el prompt por stdin. */
   stdin?: boolean;
 }
 
@@ -41,23 +41,28 @@ export type ResolveHeadlessResult =
   | { ok: false; code: string; message: string };
 
 /**
- * Pide a Engines el comando para ejecutar una tarea sin interfaz (`headless`). Una respuesta de rechazo nunca
- * lanza: devuelve `{ ok: false, code, message }` con el código de Engines, por ejemplo `UNKNOWN_AGENT`,
- * `INVALID_REASONING_LEVEL` o `READ_ONLY_UNSUPPORTED`; una respuesta ilegible devuelve
- * `ENGINES_RESPONSE_INVALID` con los primeros 200 caracteres de stdout (salida normal).
+ * Pide a Engines el comando para ejecutar una tarea sin interfaz (`headless`). Una respuesta de rechazo no lanza:
+ * devuelve `{ ok: false, code, message }` con el código de Engines, por ejemplo `UNKNOWN_AGENT`,
+ * `INVALID_REASONING_LEVEL` o `READ_ONLY_UNSUPPORTED`; una salida que no sea JSON, o que no traiga el campo
+ * `headless` ni `error`, devuelve `ENGINES_RESPONSE_INVALID` con los primeros 200 caracteres de stdout (salida
+ * normal). El código de salida de Engines no se mira, y solo se comprueba que exista uno de esos dos campos, no su
+ * forma interior.
  *
  * @param options Ejecutable de Engines y datos de la tarea usados para formar sus argumentos.
  * @returns El comando resuelto o el rechazo normalizado con el código y mensaje correspondientes.
- * @throws El error de lanzamiento o de lectura si no se puede iniciar Engines o leer la salida del proceso; las respuestas que Engines sí entrega se convierten en resultados y no lanzan.
+ * @throws El error del sistema si no se puede arrancar Engines o leer su salida; un `error` que no sea un objeto con `code` (por ejemplo `null`) también lanza un `TypeError`.
  */
 export async function resolveHeadlessCommand(
   options: ResolveHeadlessOptions
 ): Promise<ResolveHeadlessResult> {
   // El prompt no se pasa como argumento `--prompt`: Workers siempre pide `--stdin-prompt` y Engines ignora por
-  // completo el valor de `--prompt` cuando ambos aparecen (se comprobó que la salida es idéntica byte a byte).
-  // Pasarlo también arriesgaría un error `E2BIG` para instrucciones cercanas a `ARG_MAX` (límite de bytes de los
-  // argumentos del sistema operativo, que puede ser de unos 128 KiB) y dejaría el contenido visible en `argv`
-  // (lista de argumentos del proceso) durante la llamada. Por eso la instrucción viaja después al asistente por stdin.
+  // completo el valor de `--prompt` cuando ambos aparecen (se comprobó en vivo que la salida es idéntica byte a
+  // byte con o sin él). Pasarlo igualmente (a) arriesgaría un error `E2BIG` de `Bun.spawn` con instrucciones
+  // cercanas o superiores a `ARG_MAX` (límite de bytes de los argumentos del sistema operativo, que en Linux
+  // puede ser tan bajo como unos 128 KiB), lo que tumbaría todo el lote, y (b) dejaría la instrucción visible en
+  // el `argv` (lista de argumentos del proceso) del propio Engines, por ejemplo en la salida de `ps`, mientras
+  // dura esta llamada, lo que anula el propósito de `--stdin-prompt`. Por eso la instrucción viaja después al
+  // asistente por stdin.
   const args = [
     "headless",
     "--agent", options.agentId,
@@ -110,8 +115,10 @@ export type ResolveHeadlessCommand =typeof resolveHeadlessCommand;
  * Pregunta a Engines (`capabilities --agent <id>`) si garantiza el bloqueo de solo lectura para un asistente.
  * Solo responde `true` si el JSON trae `supportsReadOnly === true`; un campo ausente, `false`, un error de
  * Engines, una salida que no sea JSON o un ejecutable que no arranque producen `false` en vez de lanzar. Así,
- * un bloqueo que no se puede confirmar se considera no garantizado. La consulta no tiene tiempo límite propio:
- * si nunca responde, detiene el lote antes de pedir ningún comando.
+ * un bloqueo que no se puede confirmar se considera no garantizado. La consulta no tiene tiempo límite propio: si
+ * nunca responde, el lote se queda detenido en la primera tarea `readOnly` que la necesita, antes de pedir el
+ * comando de esa tarea (las tareas anteriores ya corrieron). Un Engines anterior a 1.17.0 no trae
+ * `supportsReadOnly` y además ignoraría `--read-only` sin dar error.
  *
  * @param enginesBin Ruta o nombre del ejecutable de Engines que se consulta.
  * @param agentId Identificador del asistente cuya capacidad de solo lectura se comprueba.

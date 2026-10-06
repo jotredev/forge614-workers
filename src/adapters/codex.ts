@@ -18,9 +18,10 @@ export const codexAdapter: EngineAdapter = {
     return { matched: false };
   },
   extraArgs() {
-    // El asistente rechaza una carpeta que no reconoce como repositorio confiable. Workers ejecuta cada tarea
-    // en una carpeta temporal nueva que no es repositorio, por lo que esta bandera se necesita siempre; se
-    // comprobó que sin ella el proceso sale pidiendo `--skip-git-repo-check`.
+    // El asistente rechaza una carpeta que no reconoce como repositorio de git confiable. Workers ejecuta cada tarea
+    // en una carpeta temporal nueva, aislada y que no es repositorio, por diseño, por lo que esta bandera se necesita
+    // en cada invocación; se comprobó empíricamente que sin ella sale con «Not inside a trusted directory and
+    // --skip-git-repo-check was not specified.»
     return ["--skip-git-repo-check"];
   },
 };
