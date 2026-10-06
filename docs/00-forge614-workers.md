@@ -40,5 +40,10 @@ Instalación (macOS y Linux): `curl -fsSL https://github.com/jotredev/forge614-w
 - [06. Testing y operación](06-testing-and-operations.md)
 - [07. Agregar un adapter](07-adding-engine-adapter.md)
 - [08. Índice exhaustivo de fuentes](08-source-index.md)
+- [09. Archivos de datos](09-data-files.md)
+- [10. Instalador, actualización y publicación](10-installer.md)
+- [11. Resolución de errores](11-troubleshooting.md)
+- [12. Glosario](12-glossary.md)
+- [Contrato de Workers](../CONTRACT.md)
 
 Las versiones en inglés conservan la misma numeración y cubren el mismo contrato.

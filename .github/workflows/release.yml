@@ -14,16 +14,21 @@ permissions:
   contents: read
 
 jobs:
+  # Repite la calidad base y valida que versión, changelog y etiqueta sean coherentes antes de publicar.
   verify:
     name: Release verification
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # Descarga el repositorio que se va a comprobar.
       - uses: actions/checkout@v4
+      # Fija Bun para reproducir la compilación y las pruebas.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      # Instala exactamente el archivo de bloqueo y evita scripts de dependencias.
       - run: bun install --frozen-lockfile --ignore-scripts
+      # Instala un Engines real y fijado para las pruebas de integración del release.
       - name: Install Forge614 Engines (pinned; the tests use the real binary)
         shell: bash
         env:
@@ -52,10 +57,15 @@ jobs:
           grep -Eq '"supportsReadOnly": *true' <<< "$capabilities" \
             || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
           echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
+      # Ejecuta la suite completa antes de aceptar artefactos.
       - run: bun test
+      # Revisa los tipos sin generar archivos.
       - run: bun run typecheck
+      # Rechaza problemas de espacios en los cambios producidos durante la verificación.
       - run: git diff --check
+      # Valida la sintaxis del instalador sin ejecutarlo.
       - run: bash -n scripts/install.sh
+      # Impide publicar una versión que no tenga su sección exacta en el historial.
       - name: Verify the CHANGELOG has an entry for the package version
         shell: bash
         run: |
@@ -63,6 +73,7 @@ jobs:
           package_version="$(bun -e 'console.log(require("./package.json").version)')"
           grep -Fxq "## ${package_version}" CHANGELOG.md \
             || { echo "CHANGELOG.md has no '## ${package_version}' entry for the package.json version" >&2; exit 1; }
+      # En publicaciones por etiqueta, impide que el nombre del tag difiera del que imprimirá el binario.
       - name: Verify the release tag matches package.json
         if: github.ref_type == 'tag'
         shell: bash
@@ -73,6 +84,7 @@ jobs:
             exit 1
           fi
 
+  # Compila y prueba un binario nativo por cada sistema y arquitectura publicados.
   build:
     name: Build ${{ matrix.artifact }}
     runs-on: ${{ matrix.runner }}
@@ -98,15 +110,21 @@ jobs:
             artifact: forge614-workers-linux-arm64
             bun_version: 1.4.2
     steps:
+      # Descarga el código exacto que se compilará.
       - uses: actions/checkout@v4
+      # Fija la versión de Bun definida por cada fila de la matriz.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun_version }}
+      # Instala exactamente el archivo de bloqueo y evita scripts de dependencias.
       - run: bun install --frozen-lockfile --ignore-scripts
+      # Crea un destino vacío y hace visible cualquier artefacto inesperado.
       - name: Create the disposable build directory
         run: mkdir dist
+      # Produce el ejecutable autocontenido para el destino de esta fila.
       - name: Compile standalone artifact
         run: bun build ./src/main.ts --compile --target=${{ matrix.target }} --outfile dist/${{ matrix.artifact }}
+      # Comprueba versión y contrato NDJSON mínimo en el binario ya compilado.
       - name: Smoke-test the native standalone artifact
         shell: bash
         run: |
@@ -117,25 +135,30 @@ jobs:
           # An empty batch against any executable proves stdin parsing and the NDJSON ending work in the compiled binary.
           out="$(printf '%s' '{"enginesBin":"/bin/sh","tasks":[]}' | ./dist/${{ matrix.artifact }})"
           case "$out" in *'"event":"run_completed"'*) ;; *) echo "empty batch did not finish: $out" >&2; exit 1 ;; esac
+      # Empaqueta antes de transferir para conservar el permiso de ejecución.
       - name: Preserve the artifact mode for collection
         run: tar -C dist -czf dist/${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+      # Entrega el paquete de esta fila al trabajo que reúne la release.
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.artifact }}
           path: dist/${{ matrix.artifact }}.tar.gz
           if-no-files-found: error
 
+  # Reúne los cuatro binarios, genera el manifiesto y valida todo antes de permitir publicación.
   assemble:
     name: Assemble and validate release assets
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Descarga en una sola carpeta todos los paquetes producidos por la matriz.
       - uses: actions/download-artifact@v4
         with:
           pattern: release-*
           merge-multiple: true
           path: dist
+      # Extrae los paquetes para recuperar los binarios y sus permisos originales.
       - name: Extract the four standalone artifacts with their original modes
         shell: bash
         run: |
@@ -143,6 +166,7 @@ jobs:
           for archive in dist/*.tar.gz; do
             tar -xzf "$archive" -C dist
           done
+      # Calcula una entrada SHA-256 por cada binario publicado.
       - name: Generate SHA256SUMS for the four release artifacts
         shell: bash
         run: |
@@ -152,6 +176,7 @@ jobs:
             forge614-workers-darwin-x64 \
             forge614-workers-linux-x64 \
             forge614-workers-linux-arm64 > SHA256SUMS
+      # Exige cuatro ejecutables no vacíos y vuelve a comprobar todas sus huellas.
       - name: Validate release artifacts and manifest
         shell: bash
         run: |
@@ -171,6 +196,7 @@ jobs:
             grep -Eq "^[0-9a-f]{64}  ${artifact}$" dist/SHA256SUMS || { echo "invalid checksum entry: $artifact" >&2; exit 1; }
           done
           (cd dist && sha256sum --check SHA256SUMS)
+      # Guarda exclusivamente los archivos ya validados para el trabajo de publicación.
       - uses: actions/upload-artifact@v4
         with:
           name: release-assets
@@ -182,6 +208,7 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
 
+  # Publica solo ante un push de tag y solo después de verificar código y artefactos.
   publish:
     name: Publish GitHub Release
     needs: [verify, assemble]
@@ -191,11 +218,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Descarga el repositorio para adjuntar el instalador versionado junto a los binarios.
       - uses: actions/checkout@v4
+      # Recupera el conjunto final que validó el trabajo anterior.
       - uses: actions/download-artifact@v4
         with:
           name: release-assets
           path: dist
+      # Crea la release; una etiqueta con sufijo se marca como preliminar.
       - name: Create the GitHub Release with the validated files only
         env:
           GH_TOKEN: ${{ github.token }}

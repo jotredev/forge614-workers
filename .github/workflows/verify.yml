@@ -8,6 +8,7 @@ permissions:
   contents: read
 
 jobs:
+  # Comprueba en los dos sistemas publicados que código, tipos e instalador siguen siendo válidos.
   unix:
     name: Unix checks (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -17,11 +18,15 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
+      # Descarga el repositorio que se va a comprobar.
       - uses: actions/checkout@v4
+      # Fija Bun para que la CI no cambie de entorno sin una revisión del repositorio.
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      # Instala exactamente el archivo de bloqueo y evita scripts de dependencias.
       - run: bun install --frozen-lockfile --ignore-scripts
+      # Instala un Engines real y fijado para que las pruebas de integración no dependan del PATH del corredor.
       - name: Install Forge614 Engines (pinned; the tests use the real binary)
         shell: bash
         env:
@@ -50,7 +55,11 @@ jobs:
           grep -Eq '"supportsReadOnly": *true' <<< "$capabilities" \
             || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
           echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
+      # Corre toda la suite contra el Engines verificado de arriba.
       - run: bun test
+      # Revisa los tipos sin generar archivos.
       - run: bun run typecheck
+      # Rechaza espacios y marcadores de conflicto que Git detecta en el diff.
       - run: git diff --check
+      # Valida la sintaxis del instalador sin ejecutarlo.
       - run: bash -n scripts/install.sh

@@ -40,3 +40,8 @@ Installation (macOS and Linux): `curl -fsSL https://github.com/jotredev/forge614
 - [06. Testing and operations](06-testing-and-operations.en.md)
 - [07. Adding an engine adapter](07-adding-engine-adapter.en.md)
 - [08. Exhaustive source index](08-source-index.en.md)
+- [09. Data files](09-data-files.en.md)
+- [10. Installer, update, and release](10-installer.en.md)
+- [11. Troubleshooting](11-troubleshooting.en.md)
+- [12. Glossary](12-glossary.en.md)
+- [Workers contract](../CONTRACT.en.md)

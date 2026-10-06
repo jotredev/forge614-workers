@@ -59,6 +59,11 @@ Todavía no hay una orden para desinstalar: se borra la carpeta `~/.forge614/wor
 | 06 | [Testing y operación](docs/06-testing-and-operations.md) | [Testing and operations](docs/06-testing-and-operations.en.md) |
 | 07 | [Agregar un adapter](docs/07-adding-engine-adapter.md) | [Adding an engine adapter](docs/07-adding-engine-adapter.en.md) |
 | 08 | [Índice exhaustivo de fuentes](docs/08-source-index.md) | [Exhaustive source index](docs/08-source-index.en.md) |
+| 09 | [Archivos de datos](docs/09-data-files.md) | [Data files](docs/09-data-files.en.md) |
+| 10 | [Instalador, actualización y publicación](docs/10-installer.md) | [Installer, update, and release](docs/10-installer.en.md) |
+| 11 | [Resolución de errores](docs/11-troubleshooting.md) | [Troubleshooting](docs/11-troubleshooting.en.md) |
+| 12 | [Glosario](docs/12-glossary.md) | [Glossary](docs/12-glossary.en.md) |
+| Contrato | [Contrato de Workers](CONTRACT.md) | [Workers contract](CONTRACT.en.md) |
 
 Además: el [runbook para agregar un adapter](docs/adding-a-new-engine-adapter.md) y el [mapa local ↔ Notion](docs/notion-map.json).
 

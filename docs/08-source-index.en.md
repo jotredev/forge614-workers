@@ -37,4 +37,8 @@
 
 - `docs/adding-a-new-engine-adapter.md`: complete operational procedure.
 - `docs/00`–`docs/08`: reviewed bilingual and navigable source set.
+- `docs/09-data-files.md` and `docs/09-data-files.en.md`: data-file fields, configuration, fixtures, and test helpers.
+- `docs/10-installer.md` and `docs/10-installer.en.md`: installer, `update`, and verification/release workflows.
+- `docs/11-troubleshooting.md` and `docs/11-troubleshooting.en.md`: codes, messages, and diagnostic actions.
+- `docs/12-glossary.md` and `docs/12-glossary.en.md`: Workers contract vocabulary.
 - `docs/notion-map.json`: local ↔ Notion map with the sha256 fingerprint of each manual.
