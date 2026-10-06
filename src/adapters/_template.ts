@@ -1,8 +1,9 @@
+/** Plantilla copiable para crear un adaptador nuevo con detección de cuota y argumentos propios de la carpeta temporal. */
 import type { EngineAdapter } from "./contract";
 
-// Copy this file to `<agentId>.ts`, replace agentId and the quota
-// pattern(s) below with the ones confirmed for that engine's CLI per
-// docs/adding-a-new-engine-adapter.md, then register it in registry.ts.
+// Se copia como `<agentId>.ts`, se sustituyen el identificador y los patrones de cuota por los confirmados en
+// la interfaz de línea de comandos del asistente según `docs/adding-a-new-engine-adapter.md`, y después se
+// registra el adaptador en `registry.ts`.
 const QUOTA_PATTERN = "REPLACE_WITH_REAL_PATTERN";
 
 export const templateAdapter: EngineAdapter = {
