@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 /** Lo que se guardó de una de las dos salidas del proceso (stdout o stderr). */
 export interface CapturedOutput {
-  /** Texto guardado, decodificado como UTF-8; tiene como máximo `maxOutputBytes` bytes de la salida real. */
+  /** Texto guardado, decodificado como UTF-8 a partir de como máximo `maxOutputBytes` bytes de la salida real; si el corte cae a mitad de un carácter de varios bytes, el texto termina con un carácter de reemplazo. */
   text: string;
   /** Bytes que el proceso escribió en total, incluidos los que no se guardaron por pasar el tope. */
   bytes: number;
@@ -36,7 +36,7 @@ export interface RunProcessOptions {
   sigkillGraceMs?: number;
 }
 
-/** Cómo terminó el proceso: fue bien (`ok: true`), se pasó del tiempo límite o ni siquiera pudo arrancar. */
+/** Cómo terminó el proceso: por su cuenta (`ok: true`, con cualquier código de salida), pasándose del tiempo límite o sin poder arrancar. */
 export type RunProcessResult =
   /** El proceso terminó por su cuenta; `exitCode` es su código de salida (0 suele significar éxito) y `durationMs` lo que tardó hasta leer sus dos salidas. */
   | { ok: true; exitCode: number; durationMs: number; stdout: CapturedOutput; stderr: CapturedOutput }
@@ -94,10 +94,10 @@ async function captureStream(
  *
  * @param options Comando, argumentos, texto de stdin, tiempo límite, tope de salida y gracia antes del SIGKILL.
  * @returns El resultado según cómo terminó: `ok: true` con código de salida y salidas, `reason: "timeout"` con lo escrito hasta entonces, o `reason: "spawn_error"` con el mensaje del sistema.
- * @throws Un error del sistema de archivos si no se puede crear la carpeta temporal; un fallo al arrancar el programa no lanza, se devuelve como `spawn_error`.
+ * @throws Un error del sistema de archivos si no se puede crear la carpeta temporal o, al final, borrarla; un fallo al arrancar el programa no lanza, se devuelve como `spawn_error`.
  */
 export async function runProcess(options: RunProcessOptions): Promise<RunProcessResult> {
-  // Carpeta de trabajo propia del proceso: nueva y vacía, para que corra aislado de cualquier repositorio.
+  // Carpeta de trabajo propia del proceso: nueva y vacía, para que no corra dentro de ningún repositorio (solo cambia su carpeta actual; el entorno y el resto del disco no se aíslan).
   const tempDir = await mkdtemp(join(tmpdir(), "forge614-workers-"));
   try {
     let proc: Bun.Subprocess<"pipe", "pipe", "pipe">;

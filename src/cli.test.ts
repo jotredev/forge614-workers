@@ -59,7 +59,7 @@ describe("runCli", () => {
   test("wraps a truly unexpected throw out of runBatch and still emits a terminal fatal_error event", async () => {
     // runBatch tiene su propia frontera de errores por tarea (ver
     // runner.test.ts), así que esta prueba ejercita la frontera exterior y
-    // defensiva del propio runCli: un lanzamiento que se escapa de runBatch
+    // defensiva del propio runCli: una excepción que se escapa de runBatch
     // por completo (aquí, simulado con un writeLine que lanza en el primerísimo
     // evento que emite runBatch, antes de que se llame a resolveHeadlessCommand)
     // debe producir igualmente una señal final y no una excepción sin atender.

@@ -2,7 +2,7 @@
  * Orquestación de una corrida desde la línea de comandos: valida el documento JSON que llega por stdin (entrada
  * estándar), comprueba que Engines sea ejecutable, corre el lote con `runBatch` y escribe un evento JSON por línea.
  * Existe para separar «qué pasa con una corrida y con qué código de salida termina» de la lectura de stdin y del
- * `process.exit`, que viven en `src/main.ts` (único que importa `runCli`); lo prueba `src/cli.test.ts`.
+ * `process.exit`, que viven en `src/main.ts` (único archivo del programa que importa `runCli`; también lo importa `src/cli.test.ts`); lo prueba `src/cli.test.ts`.
  * Pieza principal: `runCli`.
  */
 import { accessSync, constants } from "node:fs";
@@ -22,7 +22,7 @@ export interface CliResult {
  *
  * @param stdinText Texto completo leído de stdin; debe ser el documento JSON del lote (`enginesBin`, `tasks` y opcionales).
  * @param writeLine Función que recibe cada línea de salida ya serializada (un objeto JSON por línea); `main.ts` pasa `console.log`.
- * @returns `{ exitCode }`: 2 si el JSON o sus campos no son válidos o `enginesBin` no es un archivo ejecutable, 75 si el lote se pausó por cuota agotada, 1 si algo inesperado se escapó de `runBatch`, y 0 en cualquier otro caso (también si hubo tareas fallidas, que se informan como eventos).
+ * @returns `{ exitCode }`: 2 si el JSON o sus campos no son válidos o `enginesBin` no existe o no tiene permiso de ejecución, 75 si el lote se pausó por cuota agotada, 1 si algo inesperado se escapó de `runBatch`, y 0 en cualquier otro caso (también si hubo tareas fallidas, que se informan como eventos).
  */
 export async function runCli(
   stdinText: string,
@@ -60,12 +60,7 @@ export async function runCli(
   // Cada evento que emite el lote sale como una línea JSON.
   const onEvent = (event: TaskEvent) => writeLine(JSON.stringify(event));
 
-  // runBatch tiene su propia frontera de errores por tarea, así que este
-  // bloque solo se activa si algo falla fuera de ella (por ejemplo, un
-  // lanzamiento de la contabilidad interna de runBatch, fuera del
-  // try/catch por tarea, o de `writeLine` al emitir task_started o
-  // run_completed). Aun así, quien llama debe recibir ALGUNA señal final y no
-  // una excepción sin atender.
+  // runBatch tiene su propia frontera de errores por tarea, así que este bloque solo debería activarse si algo falla fuera de ella (por ejemplo, una excepción en la contabilidad interna de runBatch, o una de `writeLine` al emitir `task_started`, `run_completed` o el `task_failed` de una tarea). Aun así, quien llama debe recibir ALGUNA señal final y no una excepción sin atender.
   try {
     const result = await runBatch(
       { enginesBin: input.enginesBin, maxOutputBytes: input.maxOutputBytes, tasks: input.tasks },
