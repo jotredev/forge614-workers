@@ -1,8 +1,6 @@
 #!/usr/bin/env bun
-// Stands in for a forge614-engines that predates 1.17.0: `capabilities`
-// answers without the `supportsReadOnly` field, which is exactly how such an
-// Engines behaves (it also ignores `--read-only` without an error, so the
-// field's absence is the only warning Workers gets).
+// Simula un Engines anterior a 1.17.0: `capabilities` responde sin el campo `supportsReadOnly`, igual que lo haría ese Engines (que además ignora
+// `--read-only` sin dar error, así que la ausencia del campo es el único aviso que recibe Workers). Lo usa la prueba «returns false when capabilities has no supportsReadOnly field» de `src/engines-client.test.ts`.
 console.log(
   JSON.stringify({
     schemaVersion: 1,
