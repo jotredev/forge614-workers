@@ -50,7 +50,7 @@ export type ResolveHeadlessResult =
  *
  * @param options Ejecutable de Engines y datos de la tarea usados para formar sus argumentos.
  * @returns El comando resuelto o el rechazo normalizado con el código y mensaje correspondientes.
- * @throws El error del sistema si no se puede arrancar Engines o leer su salida; un `error` que no sea un objeto con `code` (por ejemplo `null`) también lanza un `TypeError`.
+ * @throws El error del sistema si no se puede arrancar Engines o leer su salida; un `error` igual a `null` también lanza un `TypeError`. Si `error` es otro valor sin `code` (un texto, un número, `{}`), no lanza y devuelve `{ ok: false }` con `code` y `message` sin valor (`undefined`).
  */
 export async function resolveHeadlessCommand(
   options: ResolveHeadlessOptions
@@ -59,7 +59,8 @@ export async function resolveHeadlessCommand(
   // completo el valor de `--prompt` cuando ambos aparecen (se comprobó en vivo que la salida es idéntica byte a
   // byte con o sin él). Pasarlo igualmente (a) arriesgaría un error `E2BIG` de `Bun.spawn` con instrucciones
   // cercanas o superiores a `ARG_MAX` (límite de bytes de los argumentos del sistema operativo, que en Linux
-  // puede ser tan bajo como unos 128 KiB), lo que tumbaría todo el lote, y (b) dejaría la instrucción visible en
+  // puede ser tan bajo como unos 128 KiB), lo que haría fallar esa tarea (el ejecutor la informa como
+  // `task_failed` con `generic_error` y el lote sigue), y (b) dejaría la instrucción visible en
   // el `argv` (lista de argumentos del proceso) del propio Engines, por ejemplo en la salida de `ps`, mientras
   // dura esta llamada, lo que anula el propósito de `--stdin-prompt`. Por eso la instrucción viaja después al
   // asistente por stdin.

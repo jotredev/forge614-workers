@@ -22,7 +22,7 @@ const enginesInstallerTestUrl = "FORGE614_WORKERS_ENGINES_INSTALLER_TEST_URL";
 interface FakeEngines {
   /** Versión que imprime `--version`, por ejemplo `1.17.0` (la mínima que acepta el instalador). */
   version: string;
-  /** Valor de `supportsReadOnly` que devuelve `capabilities` para claude-code. */
+  /** Valor de `supportsReadOnly` que devuelve `capabilities`; el doble contesta igual para cualquier asistente, con `id` fijo `claude-code`. */
   supportsReadOnly: boolean;
 }
 
@@ -274,8 +274,7 @@ test("clean install: version folder, active link and locked-down folders", async
 });
 
 /**
- * Comprueba que `--version v1.0.0` pide la versión por su etiqueta (la ruta `/releases/tags/...` del servidor) y deja
- * instalada esa carpeta de versión. Importa porque es la única forma de fijar una versión en vez de tomar la última.
+ * Comprueba que `--version v1.0.0` termina con 0 y deja instalada la carpeta de esa versión. El servidor de pruebas contesta igual a `/releases/latest` y a `/releases/tags/...`, así que la prueba no distingue cuál de las dos rutas se pidió. Importa porque `--version` es la forma de fijar una versión en vez de tomar la última.
  */
 test("--version selects a release by tag", async () => {
   const { home, forge, server, base } = sandbox();
