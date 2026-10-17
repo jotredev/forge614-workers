@@ -75,9 +75,8 @@ describe("runBatch", () => {
   });
 
   /**
-   * Prepara un stdout de 1500 emojis más «usage limit» con agente codex y salida 0, y espera `task_completed`
-   * sin pausa por cuota. Ojo: con salida 0 la detección de cuota no corre, así que esta prueba no distingue
-   * el corte por bytes del corte por caracteres (ver el comentario de dentro, que describe la intención original).
+   * Prepara un stdout de 1500 emojis más «usage limit» con agente codex y salida 1; la detección corre, pero el
+   * patrón queda fuera de los primeros 4096 bytes y la tarea falla sin pausar el lote por cuota.
    */
   test("byte-slices the quota-detection stdout prefix instead of char-slicing", async () => {
     // "🎉" (U+1F389) ocupa 4 bytes en UTF-8 pero solo 2 unidades de código
@@ -101,7 +100,7 @@ describe("runBatch", () => {
       }),
       runProcess: async (): Promise<RunProcessResult> => ({
         ok: true,
-        exitCode: 0,
+        exitCode: 1,
         durationMs: 10,
         stdout: { text: stdout, bytes: Buffer.byteLength(stdout, "utf8"), truncated: false },
         stderr: { text: "", bytes: 0, truncated: false },
@@ -119,7 +118,7 @@ describe("runBatch", () => {
     );
 
     expect(result.pausedByQuota).toBe(false);
-    expect(events.map((e) => e.event)).toEqual(["task_started", "task_completed", "run_completed"]);
+    expect(events.map((e) => e.event)).toEqual(["task_started", "task_failed", "run_completed"]);
   });
 
   /**
