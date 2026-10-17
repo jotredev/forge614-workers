@@ -23,13 +23,13 @@ Portable repository identity (project and group `forge614` ids and names) that `
 
 ## `docs/notion-map.json`
 
-Map between local manuals and their published pages. It does not participate in Workers execution (`src/main.ts:55-76`). Each `fingerprint` is `sha256:` plus the local manual's SHA-256 at the time it was reviewed against Notion. `reviewedProductVersion` remains `0.1.0` until those pages are published again; this documentation does not modify the map (`docs/notion-map.json:4,8-25`). It covers only manuals 00 to 08 (18 entries); 09 to 12 and `CONTRACT.md` have no entry yet. No file under `src/`, `test/`, or `scripts/` reads or writes it: it is maintained by the Notion publication flow, outside this repository.
+Map between local manuals and their published pages. It does not participate in Workers execution (`src/main.ts:55-76`). Each `fingerprint` is `sha256:` plus the local manual's SHA-256 at the time it was reviewed against Notion. `reviewedProductVersion` is intentionally kept at `0.1.0` until the Notion pages are republished; the product version and this change do not update it (`docs/notion-map.json:4,8-25`). It covers only manuals 00 to 08 (18 entries); 09 to 12 and `CONTRACT.md` have no entry yet. No file under `src/`, `test/`, or `scripts/` reads or writes it: it is maintained by the Notion publication flow, outside this repository.
 
 | Field | Type | Writer | Reader | Example |
 |---|---|---|---|---|
 | `project` | text | External Notion publication flow (not recorded in the code) | External Notion publication flow (not recorded in the code) | `forge614-workers` (`docs/notion-map.json:2`) |
 | `repository` | text | External Notion publication flow (not recorded in the code) | External Notion publication flow (not recorded in the code) | `jotredev/forge614-workers` (`docs/notion-map.json:3`) |
-| `reviewedProductVersion` | semantic-version text | Publication process, when pages are reviewed | Whoever checks publication freshness | `0.1.0` (`docs/notion-map.json:4`) |
+| `reviewedProductVersion` | semantic-version text | Publication process, when the Notion pages are republished | Whoever checks which product version those pages reflect | `0.1.0`, intentionally kept until republication (`docs/notion-map.json:4`) |
 | `notionHub` | URL | External Notion publication flow (not recorded in the code) | External Notion publication flow (not recorded in the code) | Project hub URL (`docs/notion-map.json:5`) |
 | `category` | text | External Notion publication flow (not recorded in the code) | External Notion publication flow (not recorded in the code) | `AI Engineer / Librerías` (`docs/notion-map.json:6`) |
 | `entries` | array of objects | External Notion publication flow (not recorded in the code) | External Notion publication flow (not recorded in the code) | 18 local/remote associations (`docs/notion-map.json:7-25`) |

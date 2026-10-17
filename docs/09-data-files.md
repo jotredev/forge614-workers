@@ -23,13 +23,13 @@ Identidad portátil del repositorio (id y nombre del proyecto y del grupo `forge
 
 ## `docs/notion-map.json`
 
-Mapa entre los manuales locales y sus páginas publicadas. No participa en la ejecución de Workers (`src/main.ts:55-76`). Cada `fingerprint` es `sha256:` más el SHA-256 del manual local en el momento en que se revisó contra Notion. `reviewedProductVersion` permanece en `0.1.0` hasta que vuelvan a publicarse esas páginas; esta documentación no modifica el mapa (`docs/notion-map.json:4,8-25`). Cubre solo los manuales 00 a 08 (18 entradas); 09 a 12 y `CONTRACT.md` aún no tienen entrada. Ningún archivo de `src/`, `test/` ni `scripts/` lo lee o lo escribe: lo mantiene el flujo de publicación a Notion, que está fuera de este repositorio.
+Mapa entre los manuales locales y sus páginas publicadas. No participa en la ejecución de Workers (`src/main.ts:55-76`). Cada `fingerprint` es `sha256:` más el SHA-256 del manual local en el momento en que se revisó contra Notion. `reviewedProductVersion` se mantiene en `0.1.0` a propósito hasta que se republiquen las páginas de Notion; la versión del producto y este cambio no lo actualizan (`docs/notion-map.json:4,8-25`). Cubre solo los manuales 00 a 08 (18 entradas); 09 a 12 y `CONTRACT.md` aún no tienen entrada. Ningún archivo de `src/`, `test/` ni `scripts/` lo lee o lo escribe: lo mantiene el flujo de publicación a Notion, que está fuera de este repositorio.
 
 | Campo | Tipo | Quién lo escribe | Quién lo lee | Ejemplo |
 |---|---|---|---|---|
 | `project` | texto | Flujo externo de publicación a Notion (no consta en el código) | Flujo externo de publicación a Notion (no consta en el código) | `forge614-workers` (`docs/notion-map.json:2`) |
 | `repository` | texto | Flujo externo de publicación a Notion (no consta en el código) | Flujo externo de publicación a Notion (no consta en el código) | `jotredev/forge614-workers` (`docs/notion-map.json:3`) |
-| `reviewedProductVersion` | texto semántico | El proceso de publicación, cuando revisa las páginas | Quien comprueba la vigencia de la publicación | `0.1.0` (`docs/notion-map.json:4`) |
+| `reviewedProductVersion` | texto semántico | El proceso de publicación, cuando se republiquen las páginas de Notion | Quien comprueba qué versión del producto reflejan esas páginas | `0.1.0`, valor conservado a propósito hasta la republicación (`docs/notion-map.json:4`) |
 | `notionHub` | URL | Flujo externo de publicación a Notion (no consta en el código) | Flujo externo de publicación a Notion (no consta en el código) | URL del centro del proyecto (`docs/notion-map.json:5`) |
 | `category` | texto | Flujo externo de publicación a Notion (no consta en el código) | Flujo externo de publicación a Notion (no consta en el código) | `AI Engineer / Librerías` (`docs/notion-map.json:6`) |
 | `entries` | arreglo de objetos | Flujo externo de publicación a Notion (no consta en el código) | Flujo externo de publicación a Notion (no consta en el código) | 18 asociaciones locales/remotas (`docs/notion-map.json:7-25`) |
