@@ -8,12 +8,12 @@ import { LATEST_INSTALLER_URL, installedWorkersCommand, runUpdateCommand, update
  * @param value Valor que toma `FORGE614_HOME` mientras corre `run`; `undefined` la elimina del entorno.
  * @param run Comprobación que se ejecuta con ese valor puesto.
  */
-function withForge614Home(value: string | undefined, run: () => void): void {
+async function withForge614Home(value: string | undefined, run: () => void | Promise<void>): Promise<void> {
   const previous = process.env.FORGE614_HOME;
   try {
     if (value === undefined) delete process.env.FORGE614_HOME;
     else process.env.FORGE614_HOME = value;
-    run();
+    await run();
   } finally {
     // Se restaura el valor original: si no estaba definida se elimina, y si lo estaba se vuelve a poner.
     if (previous === undefined) delete process.env.FORGE614_HOME;
@@ -137,6 +137,26 @@ describe("installedWorkersCommand", () => {
   test("falls back to ~/.forge614 when FORGE614_HOME is unset", () => withForge614Home(undefined, () => {
     expect(installedWorkersCommand().endsWith("/.forge614/workers/bin/forge614-workers")).toBe(true);
   }));
+
+  /** Comprueba que `update` rechaza una carpeta relativa antes de descargar y sale con el código de fallo 1. */
+  test("rejects a relative FORGE614_HOME before downloading", async () => {
+    await withForge614Home("relative/home", async () => {
+      const { io, out, err } = collectingIo();
+      let downloads = 0;
+
+      const exitCode = await runUpdateCommand([], "1.0.0", io, (version) => updateInstalledWorkers(version, {
+        download: async () => {
+          downloads += 1;
+          return { installer: "/tmp/unused-install.sh", cleanup: () => {} };
+        },
+      }));
+
+      expect(exitCode).toBe(1);
+      expect(downloads).toBe(0);
+      expect(out).toEqual([]);
+      expect(err).toEqual(["Could not update forge614-workers: FORGE614_HOME must be an absolute path."]);
+    });
+  });
 });
 
 /** Agrupa las pruebas de `runUpdateCommand`: argumentos, mensajes de salida y códigos de salida del comando `update`. */

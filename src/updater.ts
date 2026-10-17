@@ -9,7 +9,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 /** Instalador adjunto a cada versión publicada de Workers; `latest` siempre apunta a la más nueva. */
 export const LATEST_INSTALLER_URL = "https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh";
@@ -36,14 +36,16 @@ export interface UpdateResult {
 /**
  * Da la ruta donde el instalador deja el comando activo de Workers: toma `FORGE614_HOME` si está definida y no
  * está vacía, y si no usa `.forge614` dentro de la carpeta personal del usuario. A diferencia del instalador
- * (`scripts/install.sh`), que exige una ruta absoluta en `FORGE614_HOME`, esta función no la valida: una ruta
- * relativa se usa tal cual.
+ * (`scripts/install.sh`), que exige una ruta absoluta en `FORGE614_HOME`, esta función también rechaza una ruta
+ * relativa con el mismo mensaje.
  *
- * @returns La ruta de `forge614-workers` dentro de `<carpeta>/workers/bin`; es absoluta salvo que `FORGE614_HOME` sea relativa.
+ * @returns La ruta absoluta de `forge614-workers` dentro de `<carpeta>/workers/bin`.
+ * @throws Error con `FORGE614_HOME must be an absolute path.` si la variable está definida, no vacía y es relativa.
  */
 export function installedWorkersCommand(): string {
   // `||` hace que una variable vacía cuente como no definida y se use la carpeta por defecto.
   const forgeHome = process.env.FORGE614_HOME || join(homedir(), ".forge614");
+  if (!isAbsolute(forgeHome)) throw new Error("FORGE614_HOME must be an absolute path.");
   return join(forgeHome, "workers", "bin", "forge614-workers");
 }
 
@@ -90,7 +92,7 @@ async function downloadInstaller(url: string): Promise<{ installer: string; clea
  * @param options.spawn Lanzador de procesos; por defecto `spawnSync` (lanzamiento síncrono), heredando la terminal para que se vean los mensajes del instalador.
  * @param options.readInstalledVersion Lectura de la versión después de instalar; por defecto ejecuta el comando instalado.
  * @returns Si la versión cambió, la versión anterior y la instalada.
- * @throws Error si la descarga falla, el instalador no puede arrancar, termina por una señal o sale con código distinto de cero, o el comando instalado no se puede ejecutar o no informa una versión válida.
+ * @throws Error si `FORGE614_HOME` es relativo (antes de descargar), si la descarga falla, el instalador no puede arrancar, termina por una señal o sale con código distinto de cero, o el comando instalado no se puede ejecutar o no informa una versión válida.
  */
 export async function updateInstalledWorkers(currentVersion: string, options: {
   /** Descarga del instalador; recibe la dirección y devuelve la ruta local y cómo borrarla. */
@@ -100,6 +102,8 @@ export async function updateInstalledWorkers(currentVersion: string, options: {
   /** Lectura de la versión que quedó instalada. */
   readInstalledVersion?: ReadInstalledVersion;
 } = {}): Promise<UpdateResult> {
+  // Valida el destino antes de descargar; el instalador aplica la misma regla a `FORGE614_HOME`.
+  installedWorkersCommand();
   // La descarga va fuera del `try`: si falla, no hay archivo temporal que limpiar y nunca se lanza el instalador.
   const downloaded = await (options.download ?? downloadInstaller)(LATEST_INSTALLER_URL);
   const spawn: Spawn = options.spawn ?? ((command, args, spawnOptions) => spawnSync(command, args, spawnOptions));
