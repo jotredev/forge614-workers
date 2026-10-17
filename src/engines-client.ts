@@ -43,14 +43,14 @@ export type ResolveHeadlessResult =
 /**
  * Pide a Engines el comando para ejecutar una tarea sin interfaz (`headless`). Una respuesta de rechazo no lanza:
  * devuelve `{ ok: false, code, message }` con el código de Engines, por ejemplo `UNKNOWN_AGENT`,
- * `INVALID_REASONING_LEVEL` o `READ_ONLY_UNSUPPORTED`; una salida que no sea JSON, o que no traiga el campo
- * `headless` ni `error`, devuelve `ENGINES_RESPONSE_INVALID` con los primeros 200 caracteres de stdout (salida
- * normal). El código de salida de Engines no se mira, y solo se comprueba que exista uno de esos dos campos, no su
- * forma interior.
+ * `INVALID_REASONING_LEVEL` o `READ_ONLY_UNSUPPORTED`; una salida que no sea JSON o cuyo `error` no tenga `code` y
+ * `message` de texto, o cuyo `headless` no tenga `command` de texto y `args` como arreglo de textos, devuelve
+ * `ENGINES_RESPONSE_INVALID` con los primeros 200 caracteres de stdout (salida normal). `runner.ts` lee
+ * `command` y `args` en las líneas 204-205. El código de salida de Engines no se mira.
  *
  * @param options Ejecutable de Engines y datos de la tarea usados para formar sus argumentos.
  * @returns El comando resuelto o el rechazo normalizado con el código y mensaje correspondientes.
- * @throws El error del sistema si no se puede arrancar Engines o leer su salida; un `error` igual a `null` también lanza un `TypeError`. Si `error` es otro valor sin `code` (un texto, un número, `{}`), no lanza y devuelve `{ ok: false }` con `code` y `message` sin valor (`undefined`).
+ * @throws El error del sistema si no se puede arrancar Engines o leer su salida. Las respuestas JSON inválidas o mal formadas se devuelven como `{ ok: false, code: "ENGINES_RESPONSE_INVALID", message }`.
  */
 export async function resolveHeadlessCommand(
   options: ResolveHeadlessOptions
@@ -87,11 +87,34 @@ export async function resolveHeadlessCommand(
     if (
       typeof candidate !== "object" ||
       candidate === null ||
-      (!("headless" in candidate) && !("error" in candidate))
+      !("headless" in candidate) && !("error" in candidate)
     ) {
       throw new Error('response JSON did not contain a "headless" or "error" field');
     }
-    parsed = candidate as { headless: HeadlessCommand } | { error: { code: string; message: string } };
+    const response = candidate as Record<string, unknown>;
+    if ("error" in response) {
+      const error = response.error;
+      if (
+        typeof error !== "object" || error === null ||
+        typeof (error as Record<string, unknown>).code !== "string" ||
+        typeof (error as Record<string, unknown>).message !== "string"
+      ) {
+        throw new Error('response JSON field "error" must contain text "code" and "message" fields');
+      }
+      const errorFields = error as Record<string, string>;
+      parsed = { error: { code: errorFields.code!, message: errorFields.message! } };
+    } else {
+      const headless = response.headless;
+      if (
+        typeof headless !== "object" || headless === null ||
+        typeof (headless as Record<string, unknown>).command !== "string" ||
+        !Array.isArray((headless as Record<string, unknown>).args) ||
+        !((headless as Record<string, unknown>).args as unknown[]).every((arg: unknown) => typeof arg === "string")
+      ) {
+        throw new Error('response JSON field "headless" must contain text "command" and text-array "args" fields');
+      }
+      parsed = { headless: headless as HeadlessCommand };
+    }
   } catch (err) {
     const snippet = stdout.slice(0, 200);
     return {
