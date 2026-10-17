@@ -138,6 +138,11 @@ describe("installedWorkersCommand", () => {
     expect(installedWorkersCommand().endsWith("/.forge614/workers/bin/forge614-workers")).toBe(true);
   }));
 
+  /** Un valor vacío equivale a variable ausente y conserva el default de `~/.forge614`. */
+  test("falls back to ~/.forge614 when FORGE614_HOME is empty", () => withForge614Home("", () => {
+    expect(installedWorkersCommand().endsWith("/.forge614/workers/bin/forge614-workers")).toBe(true);
+  }));
+
   /** Comprueba que `update` rechaza una carpeta relativa antes de descargar y sale con el código de fallo 1. */
   test("rejects a relative FORGE614_HOME before downloading", async () => {
     await withForge614Home("relative/home", async () => {
