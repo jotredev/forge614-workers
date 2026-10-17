@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2
+
+- **Respuestas de Engines:** las respuestas `headless` mal formadas ahora fallan con `ENGINES_RESPONSE_INVALID`; se validan los campos que Workers consume.
+- **Actualización:** `update` rechaza `FORGE614_HOME` relativo antes de descargar, con el mismo mensaje y código de fallo que ya usa el comando.
+- **Instalador:** la selección de assets compara el nombre completo del archivo.
+- **Pruebas:** la detección de cuota verifica el límite de 4096 bytes UTF-8 incluso ante caracteres multibyte.
+- **Documentación:** se actualizaron los contratos, manuales y referencias de código para estos comportamientos.
+
 ## 1.0.1
 
 Sin cambios de comportamiento: el código, las pruebas, el instalador y los flujos de publicación quedan documentados por completo en español, y los manuales cubren los archivos de datos, el instalador, la resolución de errores y el glosario.
