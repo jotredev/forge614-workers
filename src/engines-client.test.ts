@@ -209,6 +209,23 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe("ENGINES_RESPONSE_INVALID");
   });
+
+  /** Comprueba que los cuatro cuerpos JSON mal formados se rechazan con el mismo código de respuesta inválida. */
+  test.each([
+    ["null error", "error-null"],
+    ["error string", "error-string"],
+    ["error object without fields", "error-object"],
+    ["null headless", "headless-null"],
+  ])("rejects a malformed %s response", async (_shape, agentId) => {
+    const result = await resolveHeadlessCommand({
+      enginesBin: new URL("../test/fixtures/fake-engines-malformed-response.js", import.meta.url).pathname,
+      agentId,
+      executable: "/bin/claude",
+      prompt: "hello",
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "ENGINES_RESPONSE_INVALID" });
+  });
 });
 
 /** Agrupa la comprobación conservadora de solo lectura: solo una garantía explícita puede devolver `true`. */
