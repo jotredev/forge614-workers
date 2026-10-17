@@ -9,7 +9,7 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 ## Qué hace
 
 - Valida todo el documento y aplica 10 MiB por salida y 10 minutos por tarea cuando faltan esos topes (`src/types.ts:109-112,125-153,177`).
-- Pregunta a Engines por el comando `headless` y entrega el prompt por stdin, no por argumentos (`src/engines-client.ts:58-79`; `src/runner.ts:149-209`).
+- Pregunta a Engines por el comando `headless` y entrega el prompt por stdin, no por argumentos. Exige `error.code` y `error.message` de texto, o `headless.command` de texto y `headless.args` como arreglo de textos; una respuesta mal formada devuelve `ENGINES_RESPONSE_INVALID` (`src/engines-client.ts:43-128`; `src/runner.ts:149-209,204-205`).
 - Ejecuta cada tarea en una carpeta temporal vacía, hereda el entorno y borra la carpeta al terminar (`src/process-runner.ts:99-119,174-177`).
 - Captura stdout y stderr con conteo real, truncamiento y tiempo límite (`src/process-runner.ts:50-88,141-173`).
 - Detecta cuota mediante el adaptador registrado y corta el lote con `quota_exhausted` (`src/runner.ts:247-280`).
@@ -40,7 +40,7 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 | `forge614-workers` | Un documento JSON por stdin; ver [03](docs/03-data-contract.md) | Un evento JSON por línea | `0`, `1`, `2`, `75` (`src/cli.ts:18-80`) |
 | `forge614-workers --version`, `-v` | Debe ser el primer argumento | `forge614-workers <versión>` | `0` (`src/main.ts:32-43,57-62`) |
 | `forge614-workers --help`, `-h` | Debe ser el primer argumento | Ayuda de texto | `0` (`src/main.ts:12-43,57-62`) |
-| `forge614-workers update` | Ningún argumento adicional | Mensaje de actualizado o ya vigente por stdout; fallos por stderr | `0`, `1`, `2` (`src/updater.ts:121-157`) |
+| `forge614-workers update` | Ningún argumento adicional | Mensaje de actualizado o ya vigente por stdout; fallos por stderr | `0`, `1`, `2` (`src/updater.ts:125-161`) |
 
 ## Códigos de salida
 
@@ -51,7 +51,7 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 | `2` | Entrada inválida, Engines no ejecutable o argumentos extra de `update`. |
 | `75` | Lote pausado por cuota. |
 
-La decisión exacta está en `src/cli.ts:31-80` y `src/updater.ts:139-156`.
+La decisión exacta está en `src/cli.ts:31-80` y `src/updater.ts:143-161`.
 
 ## Códigos de error y razones de fallo
 
@@ -60,7 +60,7 @@ La decisión exacta está en `src/cli.ts:31-80` y `src/updater.ts:139-156`.
 | `invalid_input` | El documento o una tarea no cumple la validación (`src/types.ts:125-208`). |
 | `engines_bin_not_found` | `enginesBin` no existe o no es ejecutable (`src/cli.ts:46-58`). |
 | `unexpected_error` | Excepción fuera de la frontera por tarea (`src/cli.ts:63-80`). |
-| `ENGINES_RESPONSE_INVALID` | Respuesta de `headless` no legible o sin `headless`/`error` (`src/engines-client.ts:84-104`). |
+| `ENGINES_RESPONSE_INVALID` | JSON ilegible o respuesta `headless` mal formada; `error` requiere `code` y `message` de texto, y `headless` requiere `command` de texto y `args` como arreglo de textos (`src/engines-client.ts:84-123`). |
 | `HEADLESS_UNSUPPORTED` | El asistente no admite ejecución sin interfaz; `engine_unsupported` (`src/runner.ts:178-183`). |
 | `REASONING_LEVEL_UNSUPPORTED` | Ese asistente no admite el nivel; `engine_unsupported` (`src/runner.ts:178-183`). |
 | `READ_ONLY_UNSUPPORTED` | Engines no garantiza solo lectura; `engine_unsupported` (`src/runner.ts:126-146,178-183`). |

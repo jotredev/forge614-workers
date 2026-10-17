@@ -19,7 +19,7 @@ Requiere Bash con `set -euo pipefail`, `curl` y `shasum` o `sha256sum`; Engines 
 
 ## `FORGE614_HOME`
 
-Si `FORGE614_HOME` está definida y no vacía debe ser absoluta; si falta o está vacía se usa `$HOME/.forge614`. El binario de cada versión queda en `<home>/workers/<versión>/forge614-workers`, el comando activo en `<home>/workers/bin/forge614-workers` y Engines en `<home>/engines/bin/forge614-engines` (`scripts/install.sh:140-147,242-243`). La orden `update` usa la misma ruta por defecto, pero no valida que un `FORGE614_HOME` definido sea absoluto (`src/updater.ts:36-47`).
+Si `FORGE614_HOME` está definida y no vacía debe ser absoluta; si falta o está vacía se usa `$HOME/.forge614`. El binario de cada versión queda en `<home>/workers/<versión>/forge614-workers`, el comando activo en `<home>/workers/bin/forge614-workers` y Engines en `<home>/engines/bin/forge614-engines` (`scripts/install.sh:140-147,242-243`). `update` aplica la misma regla: rechaza una ruta relativa con `FORGE614_HOME must be an absolute path.` antes de descargar el instalador; el comando informa el fallo con código 1. Un valor vacío o sin definir usa `$HOME/.forge614` (`src/updater.ts:36-49,97-108,143-161`).
 
 ## Funciones del instalador
 
@@ -33,7 +33,7 @@ Si `FORGE614_HOME` está definida y no vacía debe ser absoluta; si falta o est�
 | `check_destination` | Variables globales de destino y `force` | Rechaza carpetas que sean enlaces, rutas que no sean carpetas y comandos activos inseguros. | 0 si el destino es seguro; 1 mediante `fail` (`scripts/install.sh:97-112`). |
 | `cleanup` | Variables globales temporales | Borra staging, enlace temporal, descarga y una carpeta de versión incompleta. | No llama a `exit`; conserva el código previo (`scripts/install.sh:189-206`). |
 | `download` | URL y archivo destino | Ejecuta `curl` con protocolo permitido, TLS 1.2, redirecciones y fallo HTTP. | El de `curl` (`scripts/install.sh:208-213`). |
-| `asset_url` | Texto final esperado de la URL | Extrae `browser_download_url` y exige una sola URL que termine con el texto. | 0 y URL con una coincidencia; 1 con cero o varias (`scripts/install.sh:215-235`). |
+| `asset_url` | Nombre esperado del archivo | Extrae `browser_download_url` y exige una sola URL cuyo último tramo sea exactamente ese nombre. | 0 y URL con una coincidencia; 1 con cero o varias (`scripts/install.sh:215-239`). |
 
 ## Flujo paso a paso
 
@@ -43,7 +43,7 @@ Si `FORGE614_HOME` está definida y no vacía debe ser absoluta; si falta o est�
 4. Elige la release última o una etiqueta. En pruebas, solo acepta un endpoint HTTP local autorizado (`scripts/install.sh:171-187`).
 5. Crea una carpeta de descarga y registra `cleanup` para toda salida (`scripts/install.sh:189-206`).
 6. Descarga `release.json`, valida `tag_name` y, si la versión ya está activa y no se pasó `--force`, imprime `Forge614 Workers v<versión> is already active.` y sale con 0 (`scripts/install.sh:237-249`).
-7. Localiza `SHA256SUMS` y el binario, restringe sus URL, descarga ambos y compara exactamente una huella SHA-256 minúscula (`scripts/install.sh:251-274`).
+7. Localiza `SHA256SUMS` y el binario por su nombre completo de archivo (el último tramo de cada URL), restringe sus URL, descarga ambos y compara exactamente una huella SHA-256 minúscula (`scripts/install.sh:251-274`).
 8. Asegura Engines y vuelve a comprobar el destino antes de crear Workers (`scripts/install.sh:276-278`).
 9. Crea las carpetas que falten (la de `FORGE614_HOME` con permisos 700 solo si no existía), deja `workers`, `workers/bin` y la carpeta de la versión con permisos 700, copia el binario a un archivo temporal de `mktemp` con permisos 755 y lo mueve con `mv`, y cambia atómicamente el enlace activo (`scripts/install.sh:280-301`).
 10. Imprime la ruta instalada y aclara que no añade Workers a `PATH` (`scripts/install.sh:303-305`).
@@ -60,7 +60,7 @@ Si `FORGE614_HOME` está definida y no vacía debe ser absoluta; si falta o est�
 
 ## Orden `update`
 
-`forge614-workers update` se atiende antes de leer stdin (`src/main.ts:64-71`). No admite argumentos: cualquiera produce el mensaje `forge614-workers update takes no arguments.` y salida 2 (`src/updater.ts:133-143`). Descarga el instalador de `latest` a una carpeta temporal privada, ejecuta `bash <instalador> --force`, borra la carpeta temporal del instalador en todos los caminos una vez descargado (si falla la escritura del archivo, la carpeta ya creada queda) y confirma la versión ejecutando el comando instalado con `--version` (`src/updater.ts:14-15,50-80,83-119`). Éxito sale con 0; cualquier fallo se antepone con `Could not update forge614-workers:` y sale con 1 (`src/updater.ts:144-157`).
+`forge614-workers update` se atiende antes de leer stdin (`src/main.ts:64-71`). No admite argumentos: cualquiera produce el mensaje `forge614-workers update takes no arguments.` y salida 2 (`src/updater.ts:143-147`). Antes de descargar comprueba que `FORGE614_HOME` sea absoluta; si es relativa informa `FORGE614_HOME must be an absolute path.` y el comando sale con 1. Si está vacía o sin definir usa `$HOME/.forge614` (`src/updater.ts:36-49,97-108,143-161`). Después descarga el instalador de `latest` a una carpeta temporal privada, ejecuta `bash <instalador> --force`, borra la carpeta temporal del instalador en todos los caminos una vez descargado (si falla la escritura del archivo, la carpeta ya creada queda) y confirma la versión ejecutando el comando instalado con `--version` (`src/updater.ts:14-15,52-83,85-123`). Éxito sale con 0; cualquier fallo se antepone con `Could not update forge614-workers:` y sale con 1 (`src/updater.ts:148-161`).
 
 ## Flujos de GitHub
 

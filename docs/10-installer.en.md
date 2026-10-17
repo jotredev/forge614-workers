@@ -19,7 +19,7 @@ It requires Bash with `set -euo pipefail`, `curl`, and either `shasum` or `sha25
 
 ## `FORGE614_HOME`
 
-When `FORGE614_HOME` is set and non-empty it must be absolute; when missing or empty, `$HOME/.forge614` is used. Each version's binary is placed at `<home>/workers/<version>/forge614-workers`, the active command at `<home>/workers/bin/forge614-workers`, and Engines at `<home>/engines/bin/forge614-engines` (`scripts/install.sh:140-147,242-243`). The `update` command uses the same default path but does not validate that a defined `FORGE614_HOME` is absolute (`src/updater.ts:36-47`).
+When `FORGE614_HOME` is set and non-empty it must be absolute; when missing or empty, `$HOME/.forge614` is used. Each version's binary is placed at `<home>/workers/<version>/forge614-workers`, the active command at `<home>/workers/bin/forge614-workers`, and Engines at `<home>/engines/bin/forge614-engines` (`scripts/install.sh:140-147,242-243`). `update` applies the same rule: it rejects a relative path with `FORGE614_HOME must be an absolute path.` before downloading the installer, and the command reports the failure with exit code 1. Empty or unset values use `$HOME/.forge614` (`src/updater.ts:36-49,97-108,143-161`).
 
 ## Installer functions
 
@@ -33,7 +33,7 @@ When `FORGE614_HOME` is set and non-empty it must be absolute; when missing or e
 | `check_destination` | Global destination variables and `force` | Rejects linked folders, non-folders, and unsafe active commands. | 0 when safe; 1 through `fail` (`scripts/install.sh:97-112`). |
 | `cleanup` | Global temporary variables | Removes staging, temporary link, downloads, and an incomplete version folder. | Does not call `exit`; preserves the prior code (`scripts/install.sh:189-206`). |
 | `download` | URL and destination file | Runs `curl` with the allowed protocol, TLS 1.2, redirects, and HTTP failure handling. | `curl`'s code (`scripts/install.sh:208-213`). |
-| `asset_url` | Expected URL-ending text | Extracts `browser_download_url` and requires exactly one URL ending with the text. | 0 plus URL for one match; 1 for zero or multiple (`scripts/install.sh:215-235`). |
+| `asset_url` | Expected filename | Extracts `browser_download_url` and requires one URL whose last segment exactly matches that filename. | 0 plus URL for one match; 1 for zero or multiple (`scripts/install.sh:215-239`). |
 
 ## Step-by-step flow
 
@@ -43,7 +43,7 @@ When `FORGE614_HOME` is set and non-empty it must be absolute; when missing or e
 4. Selects latest release or a tag. In tests, it accepts only an authorized local HTTP endpoint (`scripts/install.sh:171-187`).
 5. Creates a download directory and registers `cleanup` for every exit (`scripts/install.sh:189-206`).
 6. Downloads `release.json`, validates `tag_name` and, if the version is already active and `--force` was not passed, prints `Forge614 Workers v<version> is already active.` and exits 0 (`scripts/install.sh:237-249`).
-7. Locates `SHA256SUMS` and the binary, restricts their URLs, downloads both, and compares exactly one lowercase SHA-256 digest (`scripts/install.sh:251-274`).
+7. Locates `SHA256SUMS` and the binary by their full filenames (the last URL segment), restricts their URLs, downloads both, and compares exactly one lowercase SHA-256 digest (`scripts/install.sh:251-274`).
 8. Ensures Engines and checks the destination again before creating Workers (`scripts/install.sh:276-278`).
 9. Creates the missing folders (the `FORGE614_HOME` one with mode 700 only if it did not exist), leaves `workers`, `workers/bin`, and the version folder at mode 700, copies the binary to a temporary `mktemp` file with mode 755 and moves it with `mv`, and atomically changes the active link (`scripts/install.sh:280-301`).
 10. Prints the installed path and states that Workers is not added to `PATH` (`scripts/install.sh:303-305`).
@@ -60,7 +60,7 @@ When `FORGE614_HOME` is set and non-empty it must be absolute; when missing or e
 
 ## `update` command
 
-`forge614-workers update` is handled before stdin is read (`src/main.ts:64-71`). It accepts no arguments: any argument produces `forge614-workers update takes no arguments.` and exit 2 (`src/updater.ts:133-143`). It downloads the `latest` installer into a private temporary folder, runs `bash <installer> --force`, removes the installer's temporary folder on every path once downloaded (if writing the file fails, the already-created folder remains), and confirms the version by executing the installed command with `--version` (`src/updater.ts:14-15,50-80,83-119`). Success exits 0; every failure is prefixed with `Could not update forge614-workers:` and exits 1 (`src/updater.ts:144-157`).
+`forge614-workers update` is handled before stdin is read (`src/main.ts:64-71`). It accepts no arguments: any argument produces `forge614-workers update takes no arguments.` and exit 2 (`src/updater.ts:143-147`). Before downloading, it checks that `FORGE614_HOME` is absolute; a relative path reports `FORGE614_HOME must be an absolute path.` and exits 1. Empty or unset values use `$HOME/.forge614` (`src/updater.ts:36-49,97-108,143-161`). It then downloads the `latest` installer into a private temporary folder, runs `bash <installer> --force`, removes the installer's temporary folder on every path once downloaded (if writing the file fails, the already-created folder remains), and confirms the version by executing the installed command with `--version` (`src/updater.ts:14-15,52-83,85-123`). Success exits 0; every failure is prefixed with `Could not update forge614-workers:` and exits 1 (`src/updater.ts:148-161`).
 
 ## GitHub workflows
 

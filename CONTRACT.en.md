@@ -9,7 +9,7 @@ Workers sequentially executes a JSON batch of non-interactive tasks, resolves ev
 ## What it does
 
 - Validates the full document and applies 10 MiB per stream and 10 minutes per task when those limits are absent (`src/types.ts:109-112,125-153,177`).
-- Asks Engines for a `headless` command and sends the prompt over stdin, not arguments (`src/engines-client.ts:58-79`; `src/runner.ts:149-209`).
+- Asks Engines for a `headless` command and sends the prompt over stdin, not arguments. It requires text `error.code` and `error.message`, or text `headless.command` and a text-array `headless.args`; malformed responses return `ENGINES_RESPONSE_INVALID` (`src/engines-client.ts:43-128`; `src/runner.ts:149-209,204-205`).
 - Runs each task in an empty temporary directory, inherits the environment, and removes the directory afterward (`src/process-runner.ts:99-119,174-177`).
 - Captures stdout and stderr with true counts, truncation, and timeout (`src/process-runner.ts:50-88,141-173`).
 - Detects quota through the registered adapter and stops the batch with `quota_exhausted` (`src/runner.ts:247-280`).
@@ -40,7 +40,7 @@ Workers sequentially executes a JSON batch of non-interactive tasks, resolves ev
 | `forge614-workers` | One JSON document on stdin; see [03](docs/03-data-contract.en.md) | One JSON event per line | `0`, `1`, `2`, `75` (`src/cli.ts:18-80`) |
 | `forge614-workers --version`, `-v` | Must be the first argument | `forge614-workers <version>` | `0` (`src/main.ts:32-43,57-62`) |
 | `forge614-workers --help`, `-h` | Must be the first argument | Text help | `0` (`src/main.ts:12-43,57-62`) |
-| `forge614-workers update` | No additional argument | Updated/already-current message on stdout; failures on stderr | `0`, `1`, `2` (`src/updater.ts:121-157`) |
+| `forge614-workers update` | No additional argument | Updated/already-current message on stdout; failures on stderr | `0`, `1`, `2` (`src/updater.ts:125-161`) |
 
 ## Exit codes
 
@@ -51,7 +51,7 @@ Workers sequentially executes a JSON batch of non-interactive tasks, resolves ev
 | `2` | Invalid input, non-executable Engines, or extra `update` arguments. |
 | `75` | Batch paused by quota. |
 
-The exact decision is in `src/cli.ts:31-80` and `src/updater.ts:139-156`.
+The exact decision is in `src/cli.ts:31-80` and `src/updater.ts:143-161`.
 
 ## Error codes and failure reasons
 
@@ -60,7 +60,7 @@ The exact decision is in `src/cli.ts:31-80` and `src/updater.ts:139-156`.
 | `invalid_input` | Document or task fails validation (`src/types.ts:125-208`). |
 | `engines_bin_not_found` | `enginesBin` is missing or non-executable (`src/cli.ts:46-58`). |
 | `unexpected_error` | Exception outside the per-task boundary (`src/cli.ts:63-80`). |
-| `ENGINES_RESPONSE_INVALID` | `headless` response is unreadable or lacks `headless`/`error` (`src/engines-client.ts:84-104`). |
+| `ENGINES_RESPONSE_INVALID` | Unreadable JSON or malformed `headless` response; `error` requires text `code` and `message`, and `headless` requires text `command` and a text-array `args` (`src/engines-client.ts:84-123`). |
 | `HEADLESS_UNSUPPORTED` | Agent does not support headless execution; `engine_unsupported` (`src/runner.ts:178-183`). |
 | `REASONING_LEVEL_UNSUPPORTED` | Agent does not support that level; `engine_unsupported` (`src/runner.ts:178-183`). |
 | `READ_ONLY_UNSUPPORTED` | Engines does not guarantee read-only; `engine_unsupported` (`src/runner.ts:126-146,178-183`). |
