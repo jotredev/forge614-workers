@@ -91,25 +91,35 @@ export async function resolveHeadlessCommand(
     ) {
       throw new Error('response JSON did not contain a "headless" or "error" field');
     }
-    if ("error" in candidate) {
-      const error = candidate.error;
+    const response = candidate as Record<string, unknown>;
+    if ("error" in response) {
+      const error = response.error;
       if (
         typeof error !== "object" || error === null ||
-        typeof error.code !== "string" || typeof error.message !== "string"
+        typeof (error as Record<string, unknown>).code !== "string" ||
+        typeof (error as Record<string, unknown>).message !== "string"
       ) {
         throw new Error('response JSON field "error" must contain text "code" and "message" fields');
       }
-      parsed = { error: { code: error.code, message: error.message } };
+      const errorFields = error as Record<string, string>;
+      parsed = { error: { code: errorFields.code!, message: errorFields.message! } };
     } else {
-      const headless = candidate.headless;
+      const headless = response.headless;
       if (
         typeof headless !== "object" || headless === null ||
-        typeof headless.command !== "string" ||
-        !Array.isArray(headless.args) || !headless.args.every((arg) => typeof arg === "string")
+        typeof (headless as Record<string, unknown>).command !== "string" ||
+        !Array.isArray((headless as Record<string, unknown>).args) ||
+        !((headless as Record<string, unknown>).args as unknown[]).every((arg: unknown) => typeof arg === "string")
       ) {
         throw new Error('response JSON field "headless" must contain text "command" and text-array "args" fields');
       }
-      parsed = { headless: headless as HeadlessCommand };
+      const headlessFields = headless as Record<string, unknown>;
+      parsed = {
+        headless: {
+          command: headlessFields.command as string,
+          args: headlessFields.args as string[],
+        },
+      };
     }
   } catch (err) {
     const snippet = stdout.slice(0, 200);
