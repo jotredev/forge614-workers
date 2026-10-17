@@ -22,4 +22,4 @@ Sizes are observed byte counts even when text is truncated. Quota detection only
 
 ## Safe resolution
 
-Engines is invoked as `headless --agent <id> --executable <path> --stdin-prompt`, with `--model`, `--reasoning-level`, `--readable-dir`, and `--read-only` when applicable. Workers never passes `--prompt`: the prompt never appears in `argv` or `ps`.
+Engines is invoked as `headless --agent <id> --executable <path> --stdin-prompt`, with `--model`, `--reasoning-level`, `--readable-dir`, and `--read-only` when applicable. Workers never passes `--prompt`: the prompt never appears in `argv` or `ps`. A rejection response must have text `error.code` and `error.message`; a successful response must have text `headless.command` and a text-array `headless.args`, the fields the process runner executes. Malformed JSON or fields fail the task as `generic_error` with `ENGINES_RESPONSE_INVALID` (`src/engines-client.ts:43-128`; `src/runner.ts:149-209,204-205`).

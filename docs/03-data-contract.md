@@ -22,4 +22,4 @@ Los tamaños son los bytes observados, incluso cuando el texto fue truncado. La 
 
 ## Resolución segura
 
-Engines se invoca como `headless --agent <id> --executable <ruta> --stdin-prompt`, con `--model`, `--reasoning-level`, `--readable-dir` y `--read-only` cuando corresponda. Workers nunca pasa `--prompt`: el prompt no aparece en `argv` ni en `ps`.
+Engines se invoca como `headless --agent <id> --executable <ruta> --stdin-prompt`, con `--model`, `--reasoning-level`, `--readable-dir` y `--read-only` cuando corresponda. Workers nunca pasa `--prompt`: el prompt no aparece en `argv` ni en `ps`. Workers exige que una respuesta de rechazo tenga `error.code` y `error.message` de texto; una respuesta exitosa debe tener `headless.command` de texto y `headless.args` como arreglo de textos, que son los campos que ejecuta el proceso. Si el JSON o esos campos están mal formados, la tarea falla como `generic_error` con `ENGINES_RESPONSE_INVALID` (`src/engines-client.ts:43-128`; `src/runner.ts:149-209,204-205`).
