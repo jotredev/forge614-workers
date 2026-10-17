@@ -197,7 +197,8 @@ function fixtureReleaseServer(artifact: string, fixturePath: string) {
       // La ruta decide el escenario: `/mismatch/...` cambia la huella y `/unsafe-assets/...` cambia hacia dónde apuntan los archivos.
       const mismatch = url.pathname.startsWith("/mismatch/");
       const unsafeAssets = url.pathname.startsWith("/unsafe-assets/");
-      const prefix = mismatch ? "/mismatch" : "/good";
+      const assetSuffixCollision = url.pathname.startsWith("/asset-suffix/");
+      const prefix = mismatch ? "/mismatch" : assetSuffixCollision ? "/asset-suffix" : "/good";
       const baseUrl = `http://${url.host}${prefix}`;
       const assetBaseUrl = unsafeAssets ? "https://127.0.0.1:1" : baseUrl;
       // Metadatos de la versión: los pide el instalador tanto para `latest` como para una etiqueta (`/releases/tags/...`).
@@ -206,6 +207,7 @@ function fixtureReleaseServer(artifact: string, fixturePath: string) {
           tag_name: releaseTag,
           assets: [
             { name: "SHA256SUMS", browser_download_url: `${assetBaseUrl}/download/SHA256SUMS` },
+            ...(assetSuffixCollision ? [{ name: "x-SHA256SUMS", browser_download_url: `${assetBaseUrl}/download/x-SHA256SUMS` }] : []),
             { name: artifact, browser_download_url: `${assetBaseUrl}/download/${artifact}` },
           ],
         });
@@ -214,11 +216,26 @@ function fixtureReleaseServer(artifact: string, fixturePath: string) {
       if (url.pathname.endsWith("/download/SHA256SUMS")) {
         return new Response(`${mismatch ? "0".repeat(64) : digest}  ${artifact}\n`);
       }
+      if (url.pathname.endsWith("/download/x-SHA256SUMS")) return new Response("shadow asset\n");
       if (url.pathname.endsWith(`/download/${artifact}`)) return new Response(readFileSync(fixturePath));
       return new Response("not found", { status: 404 });
     },
   });
 }
+
+/** Comprueba que el nombre exacto `SHA256SUMS` gana frente al asset `x-SHA256SUMS` de una release falsa. */
+test("selects release assets by their complete filename", async () => {
+  const { home, forge, server } = sandbox();
+  installFakeEngines(home, compatibleEngines);
+  try {
+    const result = await runInstaller([], { home, releaseBaseUrl: `${server.url}asset-suffix` });
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(existsSync(join(forge, "workers", releaseVersion, "forge614-workers"))).toBe(true);
+  } finally {
+    server.stop(true);
+  }
+});
 
 /**
  * Arma un entorno de prueba completo: una carpeta raíz, un HOME falso dentro de ella, el binario de mentira, el

@@ -213,23 +213,27 @@ download() {
 }
 
 # Recibe el nombre de un archivo de la versión publicada ($1) y escribe en stdout su dirección de descarga, leída de
-# `release.json`. Elige las direcciones que terminan con ese texto (compara el final de la dirección, no el nombre completo del
-# archivo: `x-SHA256SUMS` también valdría). Devuelve 0 solo si hay exactamente una; con ninguna o con varias devuelve 1 (el
+# `release.json`. Compara el nombre completo del archivo, es decir, el último tramo de la dirección. Devuelve 0 solo si hay
+# exactamente una coincidencia; con ninguna o con varias devuelve 1 (el
 # `exit 1` del `awk`, que por ser el último comando de la tubería es el código de toda ella) y no imprime nada.
 asset_url() {
   local asset_name="$1"
-  # `tr` pone cada objeto del JSON en su propia línea, `sed` extrae el valor de `browser_download_url` y `awk` conserva
-  # las direcciones que terminan con el nombre pedido y cuenta cuántas son.
+  # `tr` pone cada objeto del JSON en su propia línea, `sed` extrae el valor de `browser_download_url` y `awk` compara
+  # el último tramo de cada dirección con el nombre pedido y cuenta cuántas coincidencias hay.
   tr '{' '\n' < "$download_dir/release.json" \
     | sed -n 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"[:space:]]*\)".*/\1/p' \
     | awk -v asset_name="$asset_name" '
-        substr($0, length($0) - length(asset_name) + 1) == asset_name {
-          count += 1
-          url = $0
+        {
+          filename = $0
+          sub(/^.*\//, "", filename)
+          if (filename == asset_name) {
+            count += 1
+            matched_url = $0
+          }
         }
         END {
           if (count != 1) exit 1
-          print url
+          print matched_url
         }
       '
 }
