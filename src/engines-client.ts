@@ -113,13 +113,7 @@ export async function resolveHeadlessCommand(
       ) {
         throw new Error('response JSON field "headless" must contain text "command" and text-array "args" fields');
       }
-      const headlessFields = headless as Record<string, unknown>;
-      parsed = {
-        headless: {
-          command: headlessFields.command as string,
-          args: headlessFields.args as string[],
-        },
-      };
+      parsed = { headless: headless as HeadlessCommand };
     }
   } catch (err) {
     const snippet = stdout.slice(0, 200);
