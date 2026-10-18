@@ -126,13 +126,15 @@ describe("installer actions", () => {
       });
       expect(existsSync(homes.workers)).toBe(false);
       expect(existsSync(homes.engines)).toBe(true);
-      expect(scheduled?.command).toBe("powershell");
+      expect(scheduled?.command).toBe("powershell.exe");
       expect(scheduled?.args).toContain("-ExecutionPolicy");
       const parked = scheduled?.env.FORGE614_WORKERS_PARKED;
       expect(parked).toMatch(/\.forge614-workers-old-.+\.exe$/);
       expect(parked?.startsWith(homes.workers)).toBe(false);
       expect(existsSync(parked ?? "")).toBe(true);
-      expect(Buffer.from(scheduled?.args.at(-1) ?? "", "base64").toString("utf16le")).toContain("Wait-Process -Id 4321 -Timeout 30");
+      const script = Buffer.from(scheduled?.args.at(-1) ?? "", "base64").toString("utf16le");
+      expect(script).toContain("Wait-Process -Id 4321 -Timeout 30");
+      expect(script).toContain("Start-Sleep -Milliseconds 250");
     } finally {
       release.server.stop(true);
       rmSync(homes.root, { recursive: true, force: true });
