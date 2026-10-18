@@ -1,248 +1,51 @@
-name: Release standalone artifacts
-
+# Precondition: a node with `file:../` dependencies to sibling repositories in
+# its package.json cannot use this template. This workflow checks out a
+# single repository, so `bun install --frozen-lockfile` would fail against a
+# path dependency that only exists on the machine that authored it. Replace
+# the dependency with the published version of the sibling node before
+# adopting this template.
+name: release
 on:
-  push:
-    tags:
-      - "v*"
+  push: { tags: ["v*"] }
   pull_request:
-    paths:
-      - ".github/workflows/release.yml"
-      - "scripts/install.sh"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
 jobs:
-  # Repite la calidad base y valida que versión, changelog y etiqueta sean coherentes antes de publicar.
-  verify:
-    name: Release verification
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      # Descarga el repositorio que se va a comprobar.
-      - uses: actions/checkout@v4
-      # Fija Bun para reproducir la compilación y las pruebas.
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
-      # Instala exactamente el archivo de bloqueo y evita scripts de dependencias.
-      - run: bun install --frozen-lockfile --ignore-scripts
-      # Instala un Engines real y fijado para las pruebas de integración del release.
-      - name: Install Forge614 Engines (pinned; the tests use the real binary)
-        shell: bash
-        env:
-          ENGINES_VERSION: "1.17.0"
-        run: |
-          set -euo pipefail
-          case "$RUNNER_OS-$RUNNER_ARCH" in
-            Linux-X64)   combo=linux-x64 ;;
-            Linux-ARM64) combo=linux-arm64 ;;
-            macOS-ARM64) combo=darwin-arm64 ;;
-            macOS-X64)   combo=darwin-x64 ;;
-            *) echo "Unsupported runner: $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
-          esac
-          name="forge614-engines-${ENGINES_VERSION}-${combo}"
-          base="https://github.com/jotredev/forge614-engines/releases/download/v${ENGINES_VERSION}"
-          dir="$RUNNER_TEMP/engines"
-          mkdir -p "$dir"
-          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz" "$base/$name.tar.gz"
-          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz.sha256" "$base/$name.tar.gz.sha256"
-          (cd "$dir" && shasum -a 256 -c "$name.tar.gz.sha256")
-          tar -xzf "$dir/$name.tar.gz" -C "$dir"
-          bin="$dir/$name/forge614-engines"
-          test -x "$bin"
-          # A wrong or too-old Engines must fail here with a clear message, not as a pile of confusing test failures.
-          capabilities="$("$bin" capabilities --agent claude-code)"
-          grep -Eq '"supportsReadOnly": *true' <<< "$capabilities" \
-            || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
-          echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
-      # Ejecuta la suite completa antes de aceptar artefactos.
-      - run: bun test
-      # Revisa los tipos sin generar archivos.
-      - run: bun run typecheck
-      # Rechaza problemas de espacios en los cambios producidos durante la verificación.
-      - run: git diff --check
-      # Valida la sintaxis del instalador sin ejecutarlo.
-      - run: bash -n scripts/install.sh
-      # Impide publicar una versión que no tenga su sección exacta en el historial.
-      - name: Verify the CHANGELOG has an entry for the package version
-        shell: bash
-        run: |
-          set -euo pipefail
-          package_version="$(bun -e 'console.log(require("./package.json").version)')"
-          grep -Fxq "## ${package_version}" CHANGELOG.md \
-            || { echo "CHANGELOG.md has no '## ${package_version}' entry for the package.json version" >&2; exit 1; }
-      # En publicaciones por etiqueta, impide que el nombre del tag difiera del que imprimirá el binario.
-      - name: Verify the release tag matches package.json
-        if: github.ref_type == 'tag'
-        shell: bash
-        run: |
-          package_version="v$(bun -e 'console.log(require("./package.json").version)')"
-          if [ "$package_version" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package.json version ($package_version)" >&2
-            exit 1
-          fi
-
-  # Compila y prueba un binario nativo por cada sistema y arquitectura publicados.
   build:
-    name: Build ${{ matrix.artifact }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - runner: macos-14
-            target: bun-darwin-arm64
-            artifact: forge614-workers-darwin-arm64
-            bun_version: 1.4.2
-          - runner: macos-15-intel
-            target: bun-darwin-x64
-            artifact: forge614-workers-darwin-x64
-            bun_version: 1.4.2
-          - runner: ubuntu-latest
-            target: bun-linux-x64
-            artifact: forge614-workers-linux-x64
-            bun_version: 1.4.2
-          - runner: ubuntu-24.04-arm
-            target: bun-linux-arm64
-            artifact: forge614-workers-linux-arm64
-            bun_version: 1.4.2
+          - { os: macos-15, target: darwin-arm64 }
+          - { os: macos-15-intel, target: darwin-x64 }
+          - { os: ubuntu-24.04-arm, target: linux-arm64 }
+          - { os: ubuntu-24.04, target: linux-x64 }
+          - { os: windows-2025, target: windows-x64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
-      # Descarga el código exacto que se compilará.
-      - uses: actions/checkout@v4
-      # Fija la versión de Bun definida por cada fila de la matriz.
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ matrix.bun_version }}
-      # Instala exactamente el archivo de bloqueo y evita scripts de dependencias.
-      - run: bun install --frozen-lockfile --ignore-scripts
-      # Crea un destino vacío y hace visible cualquier artefacto inesperado.
-      - name: Create the disposable build directory
-        run: mkdir dist
-      # Produce el ejecutable autocontenido para el destino de esta fila.
-      - name: Compile standalone artifact
-        run: bun build ./src/main.ts --compile --target=${{ matrix.target }} --outfile dist/${{ matrix.artifact }}
-      # Comprueba versión y contrato NDJSON mínimo en el binario ya compilado.
-      - name: Smoke-test the native standalone artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected="forge614-workers $(bun -e 'console.log(require("./package.json").version)')"
-          actual="$(./dist/${{ matrix.artifact }} --version)"
-          [ "$actual" = "$expected" ] || { echo "version mismatch: '$actual' != '$expected'" >&2; exit 1; }
-          # An empty batch against any executable proves stdin parsing and the NDJSON ending work in the compiled binary.
-          out="$(printf '%s' '{"enginesBin":"/bin/sh","tasks":[]}' | ./dist/${{ matrix.artifact }})"
-          case "$out" in *'"event":"run_completed"'*) ;; *) echo "empty batch did not finish: $out" >&2; exit 1 ;; esac
-      # Empaqueta antes de transferir para conservar el permiso de ejecución.
-      - name: Preserve the artifact mode for collection
-        run: tar -C dist -czf dist/${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
-      # Entrega el paquete de esta fila al trabajo que reúne la release.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}.tar.gz
-          if-no-files-found: error
-
-  # Reúne los cuatro binarios, genera el manifiesto y valida todo antes de permitir publicación.
-  assemble:
-    name: Assemble and validate release assets
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      # Descarga en una sola carpeta todos los paquetes producidos por la matriz.
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: release-*
-          merge-multiple: true
-          path: dist
-      # Extrae los paquetes para recuperar los binarios y sus permisos originales.
-      - name: Extract the four standalone artifacts with their original modes
-        shell: bash
-        run: |
-          set -euo pipefail
-          for archive in dist/*.tar.gz; do
-            tar -xzf "$archive" -C dist
-          done
-      # Calcula una entrada SHA-256 por cada binario publicado.
-      - name: Generate SHA256SUMS for the four release artifacts
-        shell: bash
-        run: |
-          cd dist
-          sha256sum \
-            forge614-workers-darwin-arm64 \
-            forge614-workers-darwin-x64 \
-            forge614-workers-linux-x64 \
-            forge614-workers-linux-arm64 > SHA256SUMS
-      # Exige cuatro ejecutables no vacíos y vuelve a comprobar todas sus huellas.
-      - name: Validate release artifacts and manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          for artifact in forge614-workers-darwin-arm64 forge614-workers-darwin-x64 \
-            forge614-workers-linux-x64 forge614-workers-linux-arm64; do
-            test -s "dist/$artifact" || { echo "missing or empty artifact: $artifact" >&2; exit 1; }
-          done
-          for artifact in forge614-workers-darwin-arm64 forge614-workers-darwin-x64 \
-            forge614-workers-linux-x64 forge614-workers-linux-arm64; do
-            test -x "dist/$artifact" || { echo "artifact is not executable: $artifact" >&2; exit 1; }
-          done
-          test -s dist/SHA256SUMS || { echo "missing or empty SHA256SUMS" >&2; exit 1; }
-          test "$(wc -l < dist/SHA256SUMS | tr -d ' ')" = 4
-          for artifact in forge614-workers-darwin-arm64 forge614-workers-darwin-x64 \
-            forge614-workers-linux-x64 forge614-workers-linux-arm64; do
-            grep -Eq "^[0-9a-f]{64}  ${artifact}$" dist/SHA256SUMS || { echo "invalid checksum entry: $artifact" >&2; exit 1; }
-          done
-          (cd dist && sha256sum --check SHA256SUMS)
-      # Guarda exclusivamente los archivos ya validados para el trabajo de publicación.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-assets
-          path: |
-            dist/forge614-workers-darwin-arm64
-            dist/forge614-workers-darwin-x64
-            dist/forge614-workers-linux-x64
-            dist/forge614-workers-linux-arm64
-            dist/SHA256SUMS
-          if-no-files-found: error
-
-  # Publica solo ante un push de tag y solo después de verificar código y artefactos.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with: { bun-version: "1.4.2" }
+      - run: bun install --frozen-lockfile
+      - run: bun run build:target
+        env: { FORGE614_TARGET: "${{ matrix.target }}" }
+      - run: bun run smoke:target
+        env: { FORGE614_TARGET: "${{ matrix.target }}" }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with: { name: "${{ matrix.target }}", path: dist/release/* }
   publish:
-    name: Publish GitHub Release
-    needs: [verify, assemble]
+    needs: build
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: { contents: write }
     steps:
-      # Descarga el repositorio para adjuntar el instalador versionado junto a los binarios.
-      - uses: actions/checkout@v4
-      # Recupera el conjunto final que validó el trabajo anterior.
-      - uses: actions/download-artifact@v4
-        with:
-          name: release-assets
-          path: dist
-      # Crea la release; una etiqueta con sufijo se marca como preliminar.
-      - name: Create the GitHub Release with the validated files only
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          release_flags=()
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
-            release_flags+=(--prerelease)
-          fi
-          gh release create "$GITHUB_REF_NAME" \
-            dist/forge614-workers-darwin-arm64 \
-            dist/forge614-workers-darwin-x64 \
-            dist/forge614-workers-linux-x64 \
-            dist/forge614-workers-linux-arm64 \
-            dist/SHA256SUMS \
-            scripts/install.sh#install.sh \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            "${release_flags[@]}"
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with: { bun-version: "1.4.2" }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "22.19.0" }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with: { path: dist/release, merge-multiple: true }
+      - run: bun install --frozen-lockfile
+      - run: bun run scripts/prepare-release-assets.mjs
+      - run: bun run release:publish
+        env: { GH_TOKEN: "${{ github.token }}" }

@@ -1,47 +1,37 @@
-name: Verify
-
+name: verify
 on:
+  push: { branches: [main] }
   pull_request:
-  push:
-
-permissions:
-  contents: read
-
 jobs:
-  # Comprueba en los dos sistemas publicados que código, tipos e instalador siguen siendo válidos.
-  unix:
-    name: Unix checks (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+  verify:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      HOME: ${{ runner.temp }}/forge614-home
+      FORGE614_HOME: ${{ runner.temp }}/forge614-home/.forge614
     steps:
-      # Descarga el repositorio que se va a comprobar.
-      - uses: actions/checkout@v4
-      # Fija Bun para que la CI no cambie de entorno sin una revisión del repositorio.
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.2
-      # Instala exactamente el archivo de bloqueo y evita scripts de dependencias.
-      - run: bun install --frozen-lockfile --ignore-scripts
-      # Instala un Engines real y fijado para que las pruebas de integración no dependan del PATH del corredor.
-      - name: Install Forge614 Engines (pinned; the tests use the real binary)
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with: { bun-version: "1.4.2" }
+      - run: bun install --frozen-lockfile
+      - run: mkdir -p "$HOME" "$FORGE614_HOME"
+      - name: Install the pinned Forge614 Engines binary
         shell: bash
-        env:
-          ENGINES_VERSION: "1.17.0"
         run: |
           set -euo pipefail
           case "$RUNNER_OS-$RUNNER_ARCH" in
-            Linux-X64)   combo=linux-x64 ;;
+            Linux-X64) combo=linux-x64 ;;
             Linux-ARM64) combo=linux-arm64 ;;
             macOS-ARM64) combo=darwin-arm64 ;;
-            macOS-X64)   combo=darwin-x64 ;;
+            macOS-X64) combo=darwin-x64 ;;
             *) echo "Unsupported runner: $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
           esac
-          name="forge614-engines-${ENGINES_VERSION}-${combo}"
-          base="https://github.com/jotredev/forge614-engines/releases/download/v${ENGINES_VERSION}"
+          name="forge614-engines-1.17.0-$combo"
+          base="https://github.com/jotredev/forge614-engines/releases/download/v1.17.0"
           dir="$RUNNER_TEMP/engines"
           mkdir -p "$dir"
           curl --fail --location --silent --show-error --output "$dir/$name.tar.gz" "$base/$name.tar.gz"
@@ -50,16 +40,59 @@ jobs:
           tar -xzf "$dir/$name.tar.gz" -C "$dir"
           bin="$dir/$name/forge614-engines"
           test -x "$bin"
-          # A wrong or too-old Engines must fail here with a clear message, not as a pile of confusing test failures.
-          capabilities="$("$bin" capabilities --agent claude-code)"
-          grep -Eq '"supportsReadOnly": *true' <<< "$capabilities" \
-            || { echo "Engines ${ENGINES_VERSION} does not guarantee the read-only lock" >&2; exit 1; }
+          "$bin" capabilities --agent claude-code | grep -Eq '"supportsReadOnly": *true'
           echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
-      # Corre toda la suite contra el Engines verificado de arriba.
-      - run: bun test
-      # Revisa los tipos sin generar archivos.
-      - run: bun run typecheck
-      # Rechaza espacios sobrantes y marcadores de conflicto en los cambios que aparezcan en el árbol de trabajo durante esta ejecución (el repositorio recién descargado no trae ninguno).
+      - run: bun run verify
       - run: git diff --check
-      # Valida la sintaxis del instalador sin ejecutarlo.
-      - run: bash -n scripts/install.sh
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      HOME: ${{ runner.temp }}/forge614-home
+      FORGE614_HOME: ${{ runner.temp }}/forge614-home/.forge614
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with: { bun-version: "1.4.2" }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "22.19.0" }
+      - run: bun install --frozen-lockfile
+      - name: Create isolated test homes
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:HOME, $env:FORGE614_HOME | Out-Null
+      - name: Compile portable Windows test fixtures
+        shell: pwsh
+        run: |
+          Get-ChildItem test/fixtures/*.js | ForEach-Object {
+            bun build --compile --target=bun-windows-x64 $_.FullName --outfile "$($_.FullName).exe"
+            if ($LASTEXITCODE -ne 0) { throw "Could not compile fixture $($_.Name)" }
+          }
+      - name: Build Windows installer end-to-end assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/windows-e2e | Out-Null
+          bun build ./src/main.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-windows-x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not build Workers" }
+          bun build ./test/fixtures/fake-engines-windows.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-engines.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not build fake Engines" }
+          bun build ./test/fixtures/fake-workers-1.1.1.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-1.1.1.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not build target Workers" }
+      - name: Install the pinned Forge614 Engines binary
+        shell: pwsh
+        run: |
+          $name = "forge614-engines-1.17.0-windows-x64.tar.gz"
+          $base = "https://github.com/jotredev/forge614-engines/releases/download/v1.17.0"
+          $dir = Join-Path $env:RUNNER_TEMP "engines"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Invoke-WebRequest "$base/$name" -OutFile (Join-Path $dir $name)
+          Invoke-WebRequest "$base/$name.sha256" -OutFile (Join-Path $dir "$name.sha256")
+          $expected = ((Get-Content (Join-Path $dir "$name.sha256") -Raw).Trim() -split '\s+')[0]
+          $actual = (Get-FileHash (Join-Path $dir $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Engines checksum mismatch" }
+          tar -xzf (Join-Path $dir $name) -C $dir
+          $binary = Join-Path $dir "forge614-engines-1.17.0-windows-x64/forge614-engines.exe"
+          if (-not (Test-Path $binary)) { throw "Engines executable missing" }
+          "FORGE614_ENGINES_BIN=$binary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - run: bun run verify
+      - run: git diff --check
