@@ -10,7 +10,7 @@
     "build:target": "node scripts/build-target.mjs",
     "smoke:target": "node scripts/smoke-target.mjs",
     "release:publish": "node scripts/release-publish.mjs",
-    "verify": "bun test && bun run typecheck"
+    "verify": "bun run scripts/verify.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
