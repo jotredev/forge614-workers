@@ -1,6 +1,6 @@
 /** Comprueba en Windows la instalación, actualización y desinstalación mediante la publicación loopback. */
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -48,9 +48,8 @@ function digest(bytes: Uint8Array): string {
 }
 
 /** Ejecuta un proceso con carpetas HOME aisladas y captura ambas salidas. */
-async function run(command: string[], env: Record<string, string>, cwd?: string): Promise<{ stdout: string; stderr: string; status: number; pid: number }> {
+async function run(command: string[], env: Record<string, string>, cwd?: string): Promise<{ stdout: string; stderr: string; status: number }> {
   const child = Bun.spawn(command, { cwd, env: { ...process.env, ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-  const pid = child.pid;
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -59,7 +58,7 @@ async function run(command: string[], env: Record<string, string>, cwd?: string)
   try {
     const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     if (timedOut) throw new Error(`Process exceeded its 110 s limit: ${command[0]}`);
-    return { stdout, stderr, status, pid };
+    return { stdout, stderr, status };
   } finally {
     clearTimeout(timer);
   }
@@ -101,14 +100,14 @@ function prepareInstalledLauncher(context: ReturnType<typeof createContext>): vo
 }
 
 /** Espera sondeando hasta que desaparezcan los .exe que PowerShell borra al salir Workers. */
-async function waitForParkedUninstallRemoval(context: ReturnType<typeof createContext>): Promise<string[]> {
+async function waitForParkedUninstallRemoval(context: ReturnType<typeof createContext>): Promise<void> {
   const deadline = Date.now() + 30_000;
   const parkedFiles = () => readdirSync(context.forgeHome).filter((name) => /^\.forge614-workers-old-.+\.exe$/i.test(name));
   while (parkedFiles().length > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
-  return parkedFiles().map((name) => join(context.forgeHome, name));
+  expect(parkedFiles()).toHaveLength(0);
 }
 
-/** Ejecuta la sonda aislada y registra si el hijo PowerShell sobrevive a la salida de Bun. */
+/** Ejecuta la sonda aislada y comprueba que PowerShell sobrevive a la salida de Bun. */
 async function runDetachedPowerShellProbe(context: ReturnType<typeof createContext>, label: string, env: Record<string, string>): Promise<void> {
   const marker = join(context.root, `${label}-marker.txt`);
   const spawned = join(context.root, `${label}-spawned.txt`);
@@ -121,9 +120,24 @@ async function runDetachedPowerShellProbe(context: ReturnType<typeof createConte
   console.log(`W2F_PROBE_${label}_SPAWN=${existsSync(spawned) ? "yes" : "no"}`);
   console.log(`W2F_PROBE_${label}_ERROR=${existsSync(error) ? readFileSync(error, "utf8").trim() : "none"}`);
   console.log(`W2F_PROBE_${label}_MARKER=${existsSync(marker) ? readFileSync(marker, "utf8").trim() : "missing"}`);
+  expect(result.status).toBe(0);
+  expect(existsSync(spawned)).toBe(true);
+  expect(existsSync(error)).toBe(false);
+  expect(existsSync(marker) ? readFileSync(marker, "utf8").trim() : "missing").toBe("alive");
 }
 
 describe("Workers Windows installer end-to-end", () => {
+  test.skipIf(process.platform !== "win32")("keeps the deferred PowerShell cleanup alive after Bun exits", async () => {
+    const context = createContext();
+    try {
+      await runDetachedPowerShellProbe(context, "E2E_ENV", context.env);
+      await runDetachedPowerShellProbe(context, "RUNNER_ENV", {});
+    } finally {
+      context.release.server.stop(true);
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
+  }, 30_000);
+
   test.skipIf(process.platform !== "win32")("installs through install.ps1 and reports the installed version", async () => {
     const context = createContext();
     try {
@@ -198,38 +212,13 @@ describe("Workers Windows installer end-to-end", () => {
       expect(readdirSync(join(context.forgeHome, "workers", "bin")).filter((name) => name.includes(".old-")).length).toBe(1);
 
       const outside = await run([context.launcher, "uninstall", "--json"], context.env, context.root);
-      const environment = { ...process.env, ...context.env } as Record<string, string>;
-      const powershellProcesses = await run(["powershell.exe", "-NoProfile", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"], context.env, context.root);
-      console.log(`W2F_UNINSTALL_RETURN_POWERSHELL_PROCESSES=${powershellProcesses.status === 0 ? powershellProcesses.stdout.trim() || "none" : `query-failed:${powershellProcesses.stderr.trim()}`}`);
-      const pathKeys = Object.keys(environment).filter((key) => key === "Path" || key === "PATH");
-      const pathLookup = await run(["where.exe", "powershell.exe"], context.env, context.root);
-      console.log(`W2F_WORKERS_ENV_Path=${pathKeys.includes("Path") ? "yes" : "no"} PATH=${pathKeys.includes("PATH") ? "yes" : "no"} SystemRoot=${Boolean(environment.SystemRoot) ? "yes" : "no"} powershell=${pathLookup.status === 0 ? pathLookup.stdout.trim().replace(/\r?\n/g, ";") : "not-found"}`);
-      await runDetachedPowerShellProbe(context, "E2E_ENV", context.env);
-      await runDetachedPowerShellProbe(context, "RUNNER_ENV", {});
       expect(outside.status, `${outside.stdout}\n${outside.stderr}`).toBe(0);
       expect(JSON.parse(outside.stdout.trim())).toEqual({ schemaVersion: 1, result: { removed: true } });
       expect(existsSync(context.workers)).toBe(false);
       expect(existsSync(context.enginesPath)).toBe(true);
-      const parkedPaths = await waitForParkedUninstallRemoval(context);
-      console.log(`W2F_PARKED_AFTER_30S=${parkedPaths.length ? parkedPaths.join(";") : "none"}`);
-      if (parkedPaths.length) {
-        const parked = parkedPaths[0]!;
-        const renamed = `${parked}.diagnostic-rename`;
-        try {
-          renameSync(parked, renamed);
-          renameSync(renamed, parked);
-          console.log("W2F_PARKED_RENAME=success-restored");
-        } catch (error) {
-          console.log(`W2F_PARKED_RENAME=failed:${error instanceof Error ? error.message : String(error)}`);
-        }
-        const deletionScript = `try { Wait-Process -Id ${outside.pid} -Timeout 30 -ErrorAction SilentlyContinue } catch {}; for ($attempt = 0; $attempt -lt 30; $attempt++) { Remove-Item -LiteralPath $env:FORGE614_WORKERS_PARKED -Force -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath $env:FORGE614_WORKERS_PARKED)) { break }; Start-Sleep -Milliseconds 250 }`;
-        const deletion = await run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NonInteractive", "-EncodedCommand", Buffer.from(deletionScript, "utf16le").toString("base64")], { ...context.env, FORGE614_WORKERS_PARKED: parked }, context.root);
-        console.log(`W2F_MANUAL_DELETE_STATUS=${deletion.status} REMAINS=${existsSync(parked) ? "yes" : "no"} STDERR=${deletion.stderr.trim() || "none"}`);
-        expect(existsSync(parked)).toBe(false);
-      } else {
-        expect(parkedPaths).toHaveLength(0);
-      }
+      await waitForParkedUninstallRemoval(context);
     } finally {
+      await waitForParkedUninstallRemoval(context);
       context.release.server.stop(true);
       rmSync(context.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
