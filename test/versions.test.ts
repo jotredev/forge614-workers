@@ -55,6 +55,6 @@ describe("aligned versions", () => {
    */
   test("CHANGELOG.md has a '## <version>' entry for the package.json version", () => {
     // Se compara línea por línea, no por subcadena, para que `## 1.0.10` no cuente como `## 1.0.1`.
-    expect(read("CHANGELOG.md").split("\n")).toContain(`## ${pkg.version}`);
+    expect(read("CHANGELOG.md").split(/\r?\n/)).toContain(`## ${pkg.version}`);
   });
 });

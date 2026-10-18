@@ -44,7 +44,8 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem test/fixtures/*.js | ForEach-Object {
-            bun build --compile --target=bun-windows-x64 $_.FullName --outfile "$($_.FullName).exe"
+            $output = [System.IO.Path]::ChangeExtension($_.FullName, ".exe")
+            bun build --compile --target=bun-windows-x64 $_.FullName --outfile $output
             if ($LASTEXITCODE -ne 0) { throw "Could not compile fixture $($_.Name)" }
           }
       - name: Build Windows installer end-to-end assets
