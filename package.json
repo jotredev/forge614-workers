@@ -6,13 +6,17 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun build ./src/main.ts --compile --outfile dist/forge614-workers"
+    "build": "bun build ./src/main.ts --compile --outfile dist/forge614-workers",
+    "build:target": "node scripts/build-target.mjs",
+    "smoke:target": "node scripts/smoke-target.mjs",
+    "release:publish": "node scripts/release-publish.mjs",
+    "verify": "bun test && bun run typecheck"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
     "bun-types": "^1.3.8"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19.0"
   }
 }
