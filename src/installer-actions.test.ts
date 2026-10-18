@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
-import { sameWindowsPath, sanitizeInstallerDetail, uninstallInstalledWorkers, updateInstalledWorkers } from "./installer-actions";
+import { cleanupStaleWindowsLaunchers, sameWindowsPath, sanitizeInstallerDetail, uninstallInstalledWorkers, updateInstalledWorkers } from "./installer-actions";
 
 /** Publica una puerta Windows local con su manifiesto GNU para probarla sin red externa. */
 function serveWindowsGatekeeper(script: string) {
@@ -51,7 +51,7 @@ describe("installer actions", () => {
     )).toBe(true);
   });
 
-  test("updates the active Windows executable through PowerShell and removes its parked copy", async () => {
+  test("updates the active Windows executable and leaves its running image parked", async () => {
     const homes = fakeHomes();
     const release = serveWindowsGatekeeper("# fake installer\n");
     try {
@@ -73,7 +73,9 @@ describe("installer actions", () => {
       expect(invoked.slice(-2)).toEqual(["--version", "v1.1.1"]);
       expect(result).toEqual({ updated: true, previousVersion: "1.0.2", installedVersion: "1.1.1" });
       expect(existsSync(homes.launcher)).toBe(true);
-      expect(readdirSync(join(homes.workers, "bin"))).toEqual(["forge614-workers.exe"]);
+      const entries = readdirSync(join(homes.workers, "bin"));
+      expect(entries.filter((name) => /^forge614-workers\.exe\.old-.+$/.test(name))).toHaveLength(1);
+      expect(entries).toContain("forge614-workers.exe");
     } finally {
       release.server.stop(true);
       rmSync(homes.root, { recursive: true, force: true });
@@ -109,7 +111,7 @@ describe("installer actions", () => {
     const homes = fakeHomes();
     const release = serveWindowsGatekeeper("# fake installer\n");
     try {
-      let scheduled: string[] = [];
+      let scheduled: { command: string; args: string[]; env: Record<string, string> } | undefined;
       await uninstallInstalledWorkers({
         env: { ...homes.env, FORGE614_INSTALL_TEST_BASE_URL: release.baseUrl },
         platform: "win32",
@@ -120,14 +122,39 @@ describe("installer actions", () => {
           rmSync(homes.workers, { recursive: true, force: true });
           return { exitCode: 0, stdout: "", stderr: "" };
         },
-        scheduleDelete: (command, args) => { scheduled = [command, ...args]; },
+        scheduleDelete: (command, args, options) => { scheduled = { command, args, env: options.env }; },
       });
       expect(existsSync(homes.workers)).toBe(false);
       expect(existsSync(homes.engines)).toBe(true);
-      expect(scheduled[0]).toBe("powershell");
-      expect(scheduled).toContain("-ExecutionPolicy");
+      expect(scheduled?.command).toBe("powershell");
+      expect(scheduled?.args).toContain("-ExecutionPolicy");
+      const parked = scheduled?.env.FORGE614_WORKERS_PARKED;
+      expect(parked).toMatch(/\.forge614-workers-old-.+\.exe$/);
+      expect(parked?.startsWith(homes.workers)).toBe(false);
+      expect(existsSync(parked ?? "")).toBe(true);
+      expect(Buffer.from(scheduled?.args.at(-1) ?? "", "base64").toString("utf16le")).toContain("Wait-Process -Id 4321 -Timeout 30");
     } finally {
       release.server.stop(true);
+      rmSync(homes.root, { recursive: true, force: true });
+    }
+  });
+
+  test("cleans stale Windows parked launchers without touching active files", () => {
+    const homes = fakeHomes();
+    const bin = join(homes.workers, "bin");
+    const staleUpdate = join(bin, "forge614-workers.exe.old-abc123");
+    const staleUninstall = join(homes.env.FORGE614_HOME!, ".forge614-workers-old-abc123.exe");
+    const unrelated = join(bin, "forge614-workers.exe.old");
+    writeFileSync(staleUpdate, "old update image");
+    writeFileSync(staleUninstall, "old uninstall image");
+    writeFileSync(unrelated, "unrelated");
+    try {
+      cleanupStaleWindowsLaunchers({ env: homes.env, platform: "win32" });
+      expect(existsSync(staleUpdate)).toBe(false);
+      expect(existsSync(staleUninstall)).toBe(false);
+      expect(existsSync(homes.launcher)).toBe(true);
+      expect(existsSync(unrelated)).toBe(true);
+    } finally {
       rmSync(homes.root, { recursive: true, force: true });
     }
   });

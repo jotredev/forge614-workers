@@ -10,7 +10,7 @@ The [forge614.node.json](../forge614.node.json) pointer declares platforms, repo
 
 ## Update
 
-`forge614-workers update` downloads the gatekeeper for the latest release, verifies its checksum, and invokes it with the resolved tag. `update --version 1.1.1` selects a specific version; `--json` emits a JSON object. Workers reads the installed version with `workers/bin/forge614-workers --version`; if the installer exits without changing it, the result is `updated: false`. On Windows it parks the active `.exe` copy before replacement and restores it if the installer fails.
+`forge614-workers update` downloads the gatekeeper for the latest release, verifies its checksum, and invokes it with the resolved tag. `update --version 1.1.1` selects a specific version; `--json` emits a JSON object. Workers reads the installed version with `workers/bin/forge614-workers --version`; if the installer exits without changing it, the result is `updated: false`. On Windows it parks the active `.exe` copy before replacement and restores it if the installer fails. After a successful update, that image remains as `forge614-workers.exe.old-*` until the next `update` or `uninstall`, which attempts to remove it; Windows cannot delete the executable that is still running.
 
 ## Uninstall
 

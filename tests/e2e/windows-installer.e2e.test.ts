@@ -99,6 +99,14 @@ function prepareInstalledLauncher(context: ReturnType<typeof createContext>): vo
   copyFileSync(join(DIST, "forge614-workers-windows-x64.exe"), context.launcher);
 }
 
+/** Espera sondeando hasta que desaparezcan los .exe que PowerShell borra al salir Workers. */
+async function waitForParkedUninstallRemoval(context: ReturnType<typeof createContext>): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  const parkedFiles = () => readdirSync(context.forgeHome).filter((name) => /^\.forge614-workers-old-.+\.exe$/i.test(name));
+  while (parkedFiles().length > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(parkedFiles()).toHaveLength(0);
+}
+
 describe("Workers Windows installer end-to-end", () => {
   test.skipIf(process.platform !== "win32")("installs through install.ps1 and reports the installed version", async () => {
     const context = createContext();
@@ -110,11 +118,11 @@ describe("Workers Windows installer end-to-end", () => {
       expect(existsSync(context.enginesPath)).toBe(true);
     } finally {
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 120_000);
 
-  test.skipIf(process.platform !== "win32")("updates from the active bin executable and removes its parked copy", async () => {
+  test.skipIf(process.platform !== "win32")("updates from the active executable and cleans its parked image on the next update", async () => {
     const context = createContext();
     try {
       await installWorkers(context);
@@ -123,10 +131,20 @@ describe("Workers Windows installer end-to-end", () => {
       expect(JSON.parse(update.stdout.trim())).toEqual({ schemaVersion: 1, updated: true, previousVersion: "1.1.0", installedVersion: "1.1.1" });
       const version = await run([context.launcher, "--version"], context.env, context.root);
       expect(version.stdout.trim()).toBe("forge614-workers 1.1.1");
-      expect(readdirSync(join(context.forgeHome, "workers", "bin")).some((name) => name.includes(".old-"))).toBe(false);
+      const bin = join(context.forgeHome, "workers", "bin");
+      const parkedAfterUpdate = readdirSync(bin).filter((name) => /^forge614-workers\.exe\.old-.+$/.test(name));
+      expect(parkedAfterUpdate).toHaveLength(1);
+      const firstParkedPath = join(bin, parkedAfterUpdate[0]!);
+
+      const nextUpdate = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
+      expect(nextUpdate.status, `${nextUpdate.stdout}\n${nextUpdate.stderr}`).toBe(0);
+      expect(existsSync(firstParkedPath)).toBe(false);
+      const parkedAfterNextUpdate = readdirSync(bin).filter((name) => /^forge614-workers\.exe\.old-.+$/.test(name));
+      expect(parkedAfterNextUpdate.length).toBeLessThanOrEqual(1);
+      expect((await run([context.launcher, "--version"], context.env, context.root)).stdout.trim()).toBe("forge614-workers 1.1.1");
     } finally {
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 120_000);
 
@@ -144,7 +162,7 @@ describe("Workers Windows installer end-to-end", () => {
       expect(context.release.requests).toContain("/repos/jotredev/forge614-workers/releases/download/v1.1.1/SHA256SUMS");
     } finally {
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 120_000);
 
@@ -159,14 +177,20 @@ describe("Workers Windows installer end-to-end", () => {
       expect(existsSync(context.launcher)).toBe(true);
       expect(context.release.requests).toEqual(requestsBeforeInsideUninstall);
 
+      const update = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
+      expect(update.status, `${update.stdout}\n${update.stderr}`).toBe(0);
+      expect(JSON.parse(update.stdout.trim())).toMatchObject({ updated: true, installedVersion: "1.1.1" });
+      expect(readdirSync(join(context.forgeHome, "workers", "bin")).filter((name) => name.includes(".old-")).length).toBe(1);
+
       const outside = await run([context.launcher, "uninstall", "--json"], context.env, context.root);
       expect(outside.status, `${outside.stdout}\n${outside.stderr}`).toBe(0);
       expect(JSON.parse(outside.stdout.trim())).toEqual({ schemaVersion: 1, result: { removed: true } });
       expect(existsSync(context.workers)).toBe(false);
       expect(existsSync(context.enginesPath)).toBe(true);
     } finally {
+      await waitForParkedUninstallRemoval(context);
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }, 120_000);
 });

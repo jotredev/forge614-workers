@@ -10,7 +10,7 @@ La ficha [forge614.node.json](../forge614.node.json) fija las plataformas, el re
 
 ## Actualizar
 
-`forge614-workers update` descarga el portero de la release más reciente, comprueba la huella y lo ejecuta con la etiqueta resuelta. `update --version 1.1.1` elige una versión concreta; `--json` emite un objeto JSON. Workers lee la versión instalada con `workers/bin/forge614-workers --version`; si el instalador termina sin cambiarla, devuelve `updated: false`. En Windows aparca la copia `.exe` activa antes de reemplazarla y la restaura si falla el instalador.
+`forge614-workers update` descarga el portero de la release más reciente, comprueba la huella y lo ejecuta con la etiqueta resuelta. `update --version 1.1.1` elige una versión concreta; `--json` emite un objeto JSON. Workers lee la versión instalada con `workers/bin/forge614-workers --version`; si el instalador termina sin cambiarla, devuelve `updated: false`. En Windows aparca la copia `.exe` activa antes de reemplazarla y la restaura si falla el instalador. Si la actualización tiene éxito, conserva esa imagen como `forge614-workers.exe.old-*` hasta la siguiente orden `update` o `uninstall`, que intenta eliminarla; Windows no permite borrar el ejecutable que sigue corriendo.
 
 ## Desinstalar
 

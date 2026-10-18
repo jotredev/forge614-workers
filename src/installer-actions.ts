@@ -1,5 +1,5 @@
 /** Acciones de instalación, actualización y retirada del lanzador de Workers. */
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, readdirSync, renameSync, rmSync, writeFileSync, type Dirent } from "node:fs";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
@@ -149,6 +149,25 @@ function installedLauncher(env: Record<string, string | undefined>, platform: st
   return join(forgeHome(env), "workers", "bin", `forge614-workers${platform === "win32" ? ".exe" : ""}`);
 }
 
+/** Borra con mejor esfuerzo los ejecutables Windows aparcados por órdenes anteriores. */
+export function cleanupStaleWindowsLaunchers(options: { env?: Record<string, string | undefined>; platform?: string } = {}): void {
+  if ((options.platform ?? process.platform) !== "win32") return;
+  const env = options.env ?? process.env;
+  const home = forgeHome(env);
+  const launcherDirectory = dirname(installedLauncher(env, "win32"));
+  for (const directory of [launcherDirectory, home]) {
+    let entries: Dirent[];
+    try { entries = readdirSync(directory, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const stale = directory === home
+        ? /^\.forge614-workers-old-.+\.exe$/i.test(entry.name)
+        : /^forge614-workers\.exe\.old-.+$/i.test(entry.name);
+      if (!entry.isFile() || !stale) continue;
+      try { rmSync(join(directory, entry.name), { force: true }); } catch { /* La limpieza de restos no debe interrumpir la orden. */ }
+    }
+  }
+}
+
 /** Resuelve la versión pedida o consulta una vez la última etiqueta publicada. */
 async function selectedTag(action: InstallerAction, base: string | undefined, versionTag: string | undefined, fetcher: typeof fetch, env: Record<string, string | undefined>, platform: string): Promise<string> {
   if (versionTag !== undefined) return versionTag;
@@ -275,11 +294,7 @@ async function runInstallerGate(action: InstallerAction, options: InstallerActio
           });
         } else scheduleWindowsLauncherRemoval(parked.parked, options.processId ?? process.pid, env);
       } else if (action === "update" && parked) {
-        if (existsSync(parked.original)) {
-          if (existsSync(parked.parked)) rmSync(parked.parked, { force: true });
-        } else {
-          restoreWindowsLauncher(parked);
-        }
+        if (!existsSync(parked.original)) restoreWindowsLauncher(parked);
       }
     } catch (error) {
       restoreWindowsLauncher(parked);
@@ -296,6 +311,7 @@ export async function updateInstalledWorkers(currentVersion: string, options: In
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   forgeHome(env);
+  cleanupStaleWindowsLaunchers({ env, platform });
   const base = testBaseUrl(env);
   const tag = await selectedTag("update", base, options.versionTag, options.fetcher ?? fetch, env, platform);
   await runInstallerGate("update", { ...options, versionTag: tag });
@@ -329,6 +345,7 @@ export async function uninstallInstalledWorkers(options: InstallerActionOptions 
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   ensureUninstallStartsOutsideWorkers(env, options.cwd ?? process.cwd(), platform);
+  cleanupStaleWindowsLaunchers({ env, platform });
   await runInstallerGate("uninstall", options);
   const workersDir = join(forgeHome(env), "workers");
   if (existsSync(workersDir)) throw actionError("UNINSTALL_FAILED", "The installer exited successfully but the Workers directory still exists.", env, platform);
