@@ -18,9 +18,9 @@ cat run.json | forge614-workers
 
 Output is one NDJSON event per line on `stdout`. `run_completed` is the final line of every non-fatal run.
 
-`forge614-workers --version` prints the version, `forge614-workers --help` a short help and `forge614-workers update` updates the installed binary; none of them waits for `stdin`.
+`forge614-workers --version` prints the version, `--version --json` returns its machine-readable identity, `update` updates the binary, and `uninstall` removes it without deleting Engines. None of these commands waits for `stdin`.
 
-Installation (macOS and Linux): `curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash`. The binary ends up at `~/.forge614/workers/bin/forge614-workers`; the steps and requirements are in [06](06-testing-and-operations.en.md) and in the [README](../README.en.md).
+Installation on macOS/Linux: `curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash`. On Windows x64, download `install.ps1` and run it with PowerShell `-NoProfile -ExecutionPolicy Bypass -File install.ps1`. Node.js 22.19.0 or later is required. Windows is tested in CI only. The binary ends up at `~/.forge614/workers/bin/forge614-workers`; details are in [06](06-testing-and-operations.en.md) and the [README](../README.en.md).
 
 ## Boundaries
 
