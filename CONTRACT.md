@@ -14,7 +14,7 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 - Captura stdout y stderr con conteo real, truncamiento y tiempo límite (`src/process-runner.ts:50-88,141-173`).
 - Detecta cuota mediante el adaptador registrado y corta el lote con `quota_exhausted` (`src/runner.ts:247-280`).
 - Garantiza que una tarea `readOnly` no arranque sin confirmación de Engines (`src/runner.ts:126-146`).
-- Ofrece `--version`, `--help` y `update` sin leer stdin (`src/main.ts:55-76`).
+- Ofrece `--version`, `--help`, `update` y `uninstall` sin leer stdin (`src/main.ts:55-76`).
 
 ## Qué no hace
 
@@ -22,25 +22,38 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 - No ejecuta tareas en paralelo: usa un solo ciclo con `await` por tarea (`src/runner.ts:108-116,149-209`).
 - No reintenta fallos ni tareas tras cuota: lanza cada tarea una sola vez y, tras `quota_exhausted`, no inicia las siguientes (`src/runner.ts:109-116,265-281`).
 - No persiste sesiones ni resultados: sus módulos no abren ninguna base; los eventos se entregan a `writeLine` (`src/cli.ts:60-68`). Los asistentes que lanza sí pueden dejar sus propias sesiones bajo el `HOME` real, que Workers no limpia (véase [04](docs/04-isolation-and-process-lifecycle.md)).
-- No añade su carpeta a `PATH`; el instalador lo declara al terminar (`scripts/install.sh:303-305`).
+- No añade su carpeta a `PATH`; la ficha declara `path.modify: false` (`forge614.node.json:29`).
 - La carpeta temporal no es un aislamiento del entorno ni del disco; solo cambia `cwd` (`src/process-runner.ts:99-111`).
 
 ## Dependencias
 
 | Dependencia | Cómo se consume | Requisito |
 |---|---|---|
-| Engines | `enginesBin` para `headless` y, cuando hay `readOnly`, `capabilities --agent <id>` | El instalador exige 1.17.0 o posterior y `supportsReadOnly: true` para `claude-code` (`scripts/install.sh:43-64`). |
+| Engines | `enginesBin` para `headless` y, cuando hay `readOnly`, `capabilities --agent <id>` | El instalador exige 1.17.0 o posterior y `supportsReadOnly: true` para `claude-code` (`forge614.node.json:1-35`). |
 | Bun | Compila el binario y ejecuta pruebas y herramientas del repositorio | La CI fija 1.4.2 (`.github/workflows/verify.yml:24-26`). |
-| Sistema operativo | Procesos, señales, carpetas temporales y permisos | El instalador admite macOS y Linux, x64 y arm64 (`scripts/install.sh:149-156`). |
+| Sistema operativo | Procesos, señales y carpetas temporales | macOS y Linux x64/arm64; Windows x64. En Windows la terminación usa la API directa del proceso (`src/process-runner.ts:147-164`). |
 
 ## Comandos públicos
 
 | Comando | Entrada | Salida | Códigos de salida |
 |---|---|---|---|
 | `forge614-workers` | Un documento JSON por stdin; ver [03](docs/03-data-contract.md) | Un evento JSON por línea | `0`, `1`, `2`, `75` (`src/cli.ts:18-80`) |
-| `forge614-workers --version`, `-v` | Debe ser el primer argumento | `forge614-workers <versión>` | `0` (`src/main.ts:32-43,57-62`) |
+| `forge614-workers --version`, `-v` | Debe ser el primer argumento; `--json` es opcional | Texto `forge614-workers <versión>` o JSON con identidad | `0`; argumentos extra `2` (`src/main.ts:32-43,57-62`) |
 | `forge614-workers --help`, `-h` | Debe ser el primer argumento | Ayuda de texto | `0` (`src/main.ts:12-43,57-62`) |
-| `forge614-workers update` | Ningún argumento adicional | Mensaje de actualizado o ya vigente por stdout; fallos por stderr | `0`, `1`, `2` (`src/updater.ts:125-161`) |
+| `forge614-workers update [--version X.Y.Z] [--json]` | Etiqueta opcional; la última release si se omite | Versión instalada real; JSON opcional; errores JSON por stderr | `0`, `1`, `2` (`src/updater.ts:1-60`) |
+| `forge614-workers uninstall [--json]` | Confirma en terminal interactiva; nunca borra Engines | Informa `removed` solo tras comprobar el borrado | `0`, `1`, `2`, cancelar `130` (`src/uninstall.ts:1-90`) |
+| `forge614-workers uninstall --self [--json]` | No retira integraciones propias | `integrationsRemoved: true` en JSON | `0` (`src/uninstall.ts:45-50`) |
+| `bun run verify` | Ejecuta las comprobaciones locales | Resultado de typecheck, pruebas y ficha | `0` si pasan |
+| `bun run build:target` | Usa `FORGE614_TARGET` | Binario para macOS, Linux o Windows | `0` si compila |
+| `bun run smoke:target` | Usa `FORGE614_TARGET` | Comprueba `--version` del binario | `0` si responde |
+| `bun run release:publish` | Publica assets preparados | Release con los diez archivos | `0` si publica |
+
+## Comandos de desarrollo y publicación
+
+- `bun run verify`: typecheck, pruebas y comprobación de la ficha.
+- `bun run build:target`: compila el destino indicado por `FORGE614_TARGET`.
+- `bun run smoke:target`: ejecuta `--version` sobre el binario compilado para ese destino.
+- `bun run release:publish`: publica los diez assets preparados en el release de GitHub.
 
 ## Códigos de salida
 
@@ -48,10 +61,11 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 |:---:|---|
 | `0` | Corrida terminada, incluso con tareas fallidas; o comando informativo/actualización exitosa. |
 | `1` | Error fatal inesperado o actualización fallida. |
-| `2` | Entrada inválida, Engines no ejecutable o argumentos extra de `update`. |
+| `2` | Entrada o argumentos de comando inválidos; Engines no ejecutable. |
+| `130` | Se canceló la confirmación de desinstalación. |
 | `75` | Lote pausado por cuota. |
 
-La decisión exacta está en `src/cli.ts:31-80` y `src/updater.ts:143-161`.
+Los comandos de gestión emiten JSON estable en `src/updater.ts` y `src/uninstall.ts`; el lote NDJSON conserva su contrato en `src/cli.ts`.
 
 ## Códigos de error y razones de fallo
 
@@ -73,4 +87,4 @@ La decisión exacta está en `src/cli.ts:31-80` y `src/updater.ts:143-161`.
 
 La entrada no lleva `schemaVersion`; su compatibilidad queda definida por los campos que acepta `parseRunInput` (`src/types.ts:125-208`). Los eventos tampoco llevan versión y forman la unión cerrada `TaskEvent` (`src/types.ts:55-107`): quitar o cambiar campos es incompatible para consumidores de NDJSON. Los campos opcionales de texto `readableDir` y `model` con tipo incorrecto se omiten, pero un `readOnly` inválido rechaza todo el lote (`src/types.ts:156-163,192-207`).
 
-El instalador y la publicación cubren macOS y Linux, x64 y arm64; no hay artefacto de Windows (`scripts/install.sh:149-156`; `.github/workflows/release.yml:95-111`).
+El instalador y la publicación cubren macOS y Linux x64/arm64 y Windows x64. Windows se prueba solo en CI; no en una máquina real (`forge614.node.json:1-35`; `.github/workflows/release.yml`).

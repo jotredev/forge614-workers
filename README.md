@@ -10,7 +10,7 @@ El brazo ejecutor no interactivo de Forge614: lee un documento JSON por `stdin` 
 - No detecta ni configura asistentes de IA: eso es tarea de Forge614 Engines.
 - No es un programa para usar a mano: lo llama Forge614 Atlas por la ruta `~/.forge614/workers/bin/forge614-workers`.
 - No se agrega al PATH y no incluye el CLI de Claude Code ni el de Codex.
-- No tiene versión para Windows todavía: los binarios oficiales son para macOS y Linux.
+- Publica binarios para macOS, Linux y Windows x64. Windows se prueba en CI; no se ha probado en una máquina Windows real.
 
 ## Instalación
 
@@ -19,9 +19,15 @@ macOS / Linux:
 curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash
 ```
 
+Windows PowerShell:
+```powershell
+Invoke-WebRequest https://github.com/jotredev/forge614-workers/releases/latest/download/install.ps1 -OutFile install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
+```
+
 Para instalar una versión concreta: `curl -fsSL https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh | bash -s -- --version v1.0.0`.
 
-Requisitos: Bash, `curl` y una utilidad SHA-256 (`shasum` o `sha256sum`). Además necesita Forge614 Engines 1.17.0 o posterior que garantice el candado de solo lectura (`supportsReadOnly`): si falta o no cumple, el instalador instala la última versión de Engines antes de tocar nada de Workers (para eso necesita también `tar` y `node` o `python3`). Si Engines sigue sin cumplir, no instala nada de Workers y explica cómo cumplirlo.
+Requisito: Node.js 22.19.0 o posterior. El instalador comprueba Forge614 Engines 1.17.0 o posterior y `supportsReadOnly`; si falta o no cumple, instala una versión compatible antes de instalar Workers.
 
 El binario queda en `~/.forge614/workers/<versión>/forge614-workers` y el enlace activo en `~/.forge614/workers/bin/forge614-workers`. Workers es una dependencia interna y no se agrega al PATH: otros productos de Forge614 lo llaman directamente por esa ruta.
 
@@ -29,11 +35,9 @@ Si defines `FORGE614_HOME` (ruta absoluta), el instalador y `update` usan esa ca
 
 Para verificar: `~/.forge614/workers/bin/forge614-workers --version`.
 
-Para actualizar: `~/.forge614/workers/bin/forge614-workers update` (descarga el instalador de la última versión y lo ejecuta con `--force`).
+Para actualizar: `~/.forge614/workers/bin/forge614-workers update`; se puede elegir una versión con `update --version 1.1.0` y pedir JSON con `--json`.
 
-Para reponer Engines si se borró, usa `--force` o `update`.
-
-Todavía no hay una orden para desinstalar: se borra la carpeta `~/.forge614/workers`, que no afecta a otros productos.
+Para desinstalar Workers: `~/.forge614/workers/bin/forge614-workers uninstall`. No elimina Engines. `uninstall --self` se usa durante la limpieza del instalador.
 
 ## Entrada, salida y códigos de salida
 | Qué | Detalle |

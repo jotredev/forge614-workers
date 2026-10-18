@@ -4,13 +4,14 @@
  * salida. Cubren `--version`, `--help`, el comando `update` y la corrida de un lote con programas falsos de `test/fixtures`.
  */
 import { describe, test, expect } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pkg from "../package.json";
+import { fixturePath } from "./support/fixture-path";
 
 const MAIN_ENTRY = join(import.meta.dir, "..", "src", "main.ts");
-const FIXTURES = join(import.meta.dir, "fixtures");
 
 /**
  * Lanza `src/main.ts` sin argumentos, le escribe el documento del lote por stdin (entrada estándar) y espera a
@@ -40,24 +41,70 @@ async function runWorkers(input: string): Promise<{ stdout: string; exitCode: nu
  */
 async function runWorkersWithArgs(
   args: string[],
-  hangAfterMs = 3000
-): Promise<{ stdout: string; exitCode: number | null; hung: boolean }> {
-  const proc = Bun.spawn(["bun", MAIN_ENTRY, ...args], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
+  hangAfterMs = 3000,
+  envOverrides: Record<string, string> = {},
+  cwd?: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number | null; hung: boolean }> {
+  const home = mkdtempSync(join(tmpdir(), "forge614-workers-cli-e2e-"));
+  try {
+    const proc = Bun.spawn(["bun", MAIN_ENTRY, ...args], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      ...(cwd === undefined ? {} : { cwd }),
+      env: { ...process.env, HOME: home, FORGE614_HOME: join(home, ".forge614"), ...envOverrides },
+    });
+    // El temporizador mata el proceso si sigue vivo pasado el tiempo; al morir, la lectura de stdout de abajo termina.
+    let hung = false;
+    const timer = setTimeout(() => {
+      hung = true;
+      proc.kill();
+    }, hangAfterMs);
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    clearTimeout(timer);
+    // Un proceso matado por el temporizador no tiene un código de salida que valga, por eso se informa `null`.
+    return { stdout, stderr, exitCode: hung ? null : exitCode, hung };
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+/** Serve a checksummed gatekeeper on the installer test loopback endpoint. */
+function serveGatekeeper(file: "install.sh" | "install.ps1", script: string, tag = "v1.1.1") {
+  const bytes = new TextEncoder().encode(script);
+  const checksum = createHash("sha256").update(bytes).digest("hex");
+  const requests: string[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url);
+      requests.push(url.pathname);
+      if (url.pathname.endsWith("/releases/latest")) return Response.json({ tag_name: tag });
+      if (url.pathname.endsWith(`/releases/download/${tag}/${file}`)) return new Response(bytes);
+      if (url.pathname.endsWith(`/releases/download/${tag}/SHA256SUMS`)) return new Response(`${checksum}  ${file}\n`);
+      return new Response("not found", { status: 404 });
+    },
   });
-  // El temporizador mata el proceso si sigue vivo pasado el tiempo; al morir, la lectura de stdout de abajo termina.
-  let hung = false;
-  const timer = setTimeout(() => {
-    hung = true;
-    proc.kill();
-  }, hangAfterMs);
-  const stdout = await new Response(proc.stdout).text();
-  const exitCode = await proc.exited;
-  clearTimeout(timer);
-  // Un proceso matado por el temporizador no tiene un código de salida que valga, por eso se informa `null`.
-  return { stdout, exitCode: hung ? null : exitCode, hung };
+  return { server, requests, baseUrl: `http://127.0.0.1:${server.port}` };
+}
+
+/** Create an isolated Workers and shared Engines installation used by command e2e tests. */
+function createFakeInstallation(forgeHome: string, version = "1.0.2"): void {
+  const workers = join(forgeHome, "workers");
+  const bin = join(workers, "bin");
+  const enginesBin = join(forgeHome, "engines", "bin");
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(enginesBin, { recursive: true });
+  writeFileSync(join(workers, "current-version"), `${version}\n`);
+  writeFileSync(join(bin, "forge614-workers"), "#!/bin/sh\nprintf 'forge614-workers '; cat \"$FORGE614_HOME/workers/current-version\"\n");
+  writeFileSync(join(enginesBin, "forge614-engines"), "#!/bin/sh\nif [ \"$1\" = --version ]; then printf 'forge614-engines 1.17.0\\n'; else printf '{\"schemaVersion\":1,\"supportsReadOnly\":true}\\n'; fi\n");
+  chmodSync(join(bin, "forge614-workers"), 0o755);
+  chmodSync(join(enginesBin, "forge614-engines"), 0o755);
 }
 
 /**
@@ -75,6 +122,23 @@ describe("forge614-workers --version and --help", () => {
     expect(hung).toBe(false);
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`forge614-workers ${pkg.version}\n`);
+  });
+
+  test("--version --json prints the machine-readable package identity", async () => {
+    const { stdout, exitCode, hung } = await runWorkersWithArgs(["--version", "--json"]);
+
+    expect(hung).toBe(false);
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`${JSON.stringify({ schemaVersion: 1, name: "forge614-workers", version: pkg.version })}\n`);
+  });
+
+  test("--version --json rejects extra arguments with a structured error", async () => {
+    const { stdout, stderr, exitCode, hung } = await runWorkersWithArgs(["--version", "--json", "--extra"]);
+
+    expect(hung).toBe(false);
+    expect(exitCode).toBe(2);
+    expect(stdout).toBe("");
+    expect(JSON.parse(stderr.trim())).toMatchObject({ schemaVersion: 1, code: "INVALID_ARGUMENTS" });
   });
 
   /**
@@ -163,31 +227,63 @@ async function runUpdateWithFakeInstaller(
 
 /** Agrupa las pruebas del comando `update` de punta a punta, con descarga e instalador falsos. */
 describe("forge614-workers update", () => {
-  /**
-   * Comprueba que `update` pide la dirección del último instalador, lo ejecuta con `--force`, termina con 0 sin leer
-   * stdin e imprime `updated from <versión> to 9.9.9.`. Importa porque es el flujo completo que usa quien se actualiza.
-   */
-  test("is answered without reading stdin: downloads the latest installer and runs it with --force", async () => {
-    const { stdout, exitCode, hung, calls } = await runUpdateWithFakeInstaller();
-
-    expect(hung).toBe(false);
-    expect(exitCode).toBe(0);
-    expect(calls).toContain("fetch https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh");
-    expect(calls).toContain("installer --force");
-    expect(stdout).toBe(`forge614-workers updated from ${pkg.version} to 9.9.9.\n`);
-  });
-
-  /**
-   * Comprueba que `update --force` sale con 2, imprime `update takes no arguments` en stderr y deja el archivo de
-   * llamadas vacío. Importa porque un argumento de más debe rechazarse antes de descargar nada.
-   */
-  test("refuses extra arguments with exit 2 and does not download anything", async () => {
-    const { stderr, exitCode, hung, calls } = await runUpdateWithFakeInstaller(["--force"]);
+  test("rejects an invalid target version with a structured error", async () => {
+    const { stdout, stderr, exitCode, hung } = await runWorkersWithArgs(["update", "--version", "not-a-version", "--json"]);
 
     expect(hung).toBe(false);
     expect(exitCode).toBe(2);
-    expect(stderr).toContain("update takes no arguments");
-    expect(calls).toBe("");
+    expect(stdout).toBe("");
+    expect(JSON.parse(stderr.trim())).toMatchObject({ schemaVersion: 1, code: "INVALID_ARGUMENTS" });
+  });
+
+  test.skipIf(process.platform === "win32")("downloads a checksummed local gatekeeper and updates to the requested version", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forge614-workers-update-local-e2e-"));
+    const forgeHome = join(root, ".forge614");
+    createFakeInstallation(forgeHome);
+    const release = serveGatekeeper("install.sh", "#!/bin/sh\nset -eu\n[ \"$1\" = --version ]\nprintf '%s\\n' \"${2#v}\" > \"$FORGE614_HOME/workers/current-version\"\nprintf '%s %s\\n' \"$1\" \"$2\" >> \"$FORGE614_HOME/workers/installer-args\"\n");
+    try {
+      const env = { HOME: root, FORGE614_HOME: forgeHome, FORGE614_INSTALL_TEST_BASE_URL: release.baseUrl };
+      const { stdout, stderr, exitCode, hung } = await runWorkersWithArgs(["update", "--version", "v1.1.1", "--json"], 5000, env);
+
+      expect(hung).toBe(false);
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      expect(JSON.parse(stdout.trim())).toEqual({ schemaVersion: 1, updated: true, previousVersion: pkg.version, installedVersion: "1.1.1" });
+      expect(readFileSync(join(forgeHome, "workers", "installer-args"), "utf8")).toBe("--version v1.1.1\n");
+      expect(release.requests.sort()).toEqual([
+        "/repos/jotredev/forge614-workers/releases/download/v1.1.1/install.sh",
+        "/repos/jotredev/forge614-workers/releases/download/v1.1.1/SHA256SUMS",
+      ].sort());
+    } finally {
+      release.server.stop(true);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(process.platform === "win32")("reports updated false when the checked local installer leaves the installed version unchanged", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forge614-workers-update-same-e2e-"));
+    const forgeHome = join(root, ".forge614");
+    createFakeInstallation(forgeHome, pkg.version);
+    const release = serveGatekeeper("install.sh", "#!/bin/sh\nset -eu\n[ \"$1\" = --version ]\n", `v${pkg.version}`);
+    try {
+      const env = { HOME: root, FORGE614_HOME: forgeHome, FORGE614_INSTALL_TEST_BASE_URL: release.baseUrl };
+      const { stdout, exitCode } = await runWorkersWithArgs(["update", "--version", pkg.version, "--json"], 5000, env);
+
+      expect(exitCode).toBe(0);
+      expect(JSON.parse(stdout.trim())).toEqual({ schemaVersion: 1, updated: false, previousVersion: pkg.version, installedVersion: pkg.version });
+    } finally {
+      release.server.stop(true);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  /** Rechaza `--force` como argumento extra antes de descargar, con el sobre JSON estable. */
+  test("refuses extra arguments with exit 2 and does not download anything", async () => {
+    const { stderr, stdout, exitCode, hung } = await runWorkersWithArgs(["update", "--force"]);
+
+    expect(hung).toBe(false);
+    expect(exitCode).toBe(2);
+    expect(stdout).toBe("");
+    expect(JSON.parse(stderr.trim())).toMatchObject({ schemaVersion: 1, code: "INVALID_ARGUMENTS" });
   });
 
   /**
@@ -202,6 +298,60 @@ describe("forge614-workers update", () => {
   });
 });
 
+describe("forge614-workers uninstall", () => {
+  test("uninstall --self --json reports integrations removed without touching stdin", async () => {
+    const { stdout, stderr, exitCode, hung } = await runWorkersWithArgs(["uninstall", "--self", "--json"]);
+
+    expect(hung).toBe(false);
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
+    expect(stdout).toBe('{"schemaVersion":1,"result":{"integrationsRemoved":true}}\n');
+  });
+
+  test.skipIf(process.platform === "win32")("uninstall removes Workers only and keeps shared Engines installed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forge614-workers-uninstall-e2e-"));
+    const forgeHome = join(root, ".forge614");
+    createFakeInstallation(forgeHome);
+    const release = serveGatekeeper("install.sh", "#!/bin/sh\nset -eu\n[ \"$1\" = --uninstall ]\nrm -rf \"$FORGE614_HOME/workers\"\n");
+    try {
+      const env = { HOME: root, FORGE614_HOME: forgeHome, FORGE614_INSTALL_TEST_BASE_URL: release.baseUrl };
+      const { stdout, stderr, exitCode, hung } = await runWorkersWithArgs(["uninstall", "--json"], 2500, env);
+
+      expect(hung).toBe(false);
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe("");
+      expect(JSON.parse(stdout.trim())).toEqual({ schemaVersion: 1, result: { removed: true } });
+      expect(existsSync(join(forgeHome, "workers"))).toBe(false);
+      expect(existsSync(join(forgeHome, "engines", "bin", "forge614-engines"))).toBe(true);
+    } finally {
+      release.server.stop(true);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(process.platform === "win32")("uninstall refuses a working directory inside workers before network access", async () => {
+    const root = mkdtempSync(join(tmpdir(), "forge614-workers-uninstall-cwd-e2e-"));
+    const forgeHome = join(root, ".forge614");
+    createFakeInstallation(forgeHome);
+    const release = serveGatekeeper("install.sh", "#!/bin/sh\nexit 0\n");
+    try {
+      const workersDir = join(forgeHome, "workers");
+      const env = { HOME: root, FORGE614_HOME: forgeHome, FORGE614_INSTALL_TEST_BASE_URL: release.baseUrl };
+      const { stdout, stderr, exitCode } = await runWorkersWithArgs(["uninstall", "--json"], 2500, env, workersDir);
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(JSON.parse(stderr.trim())).toMatchObject({ schemaVersion: 1, code: "UNINSTALL_FAILED" });
+      expect(release.requests).toEqual([]);
+      expect(existsSync(workersDir)).toBe(true);
+      expect(existsSync(join(workersDir, "bin", "forge614-workers"))).toBe(true);
+    } finally {
+      release.server.stop(true);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 /** Agrupa las pruebas que corren un lote completo con `fake-engines-headless.js` y los asistentes falsos, y las entradas que lo rechazan. */
 describe("forge614-workers end-to-end", () => {
   /**
@@ -210,12 +360,12 @@ describe("forge614-workers end-to-end", () => {
    */
   test("runs a successful task against a fake engines binary and a fake agent, exit 0", async () => {
     const input = JSON.stringify({
-      enginesBin: join(FIXTURES, "fake-engines-headless.js"),
+      enginesBin: fixturePath("fake-engines-headless.js"),
       tasks: [
         {
           id: "t1",
           agentId: "claude-code",
-          executable: join(FIXTURES, "fake-agent-echo.js"),
+          executable: fixturePath("fake-agent-echo.js"),
           prompt: "hello",
         },
       ],
@@ -237,12 +387,12 @@ describe("forge614-workers end-to-end", () => {
    */
   test("stops with exit 75 when the fake agent reports quota exhaustion", async () => {
     const input = JSON.stringify({
-      enginesBin: join(FIXTURES, "fake-engines-headless.js"),
+      enginesBin: fixturePath("fake-engines-headless.js"),
       tasks: [
         {
           id: "t1",
           agentId: "claude-code",
-          executable: join(FIXTURES, "fake-agent-quota.js"),
+          executable: fixturePath("fake-agent-quota.js"),
           prompt: "hello",
         },
       ],
