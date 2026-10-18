@@ -86,10 +86,11 @@ if (args[0] === "update") {
 // `uninstall` también se contesta antes de leer stdin; el instalador común llama `uninstall --self`.
 if (args[0] === "uninstall") {
   const exitCode = await runUninstallCommand(args.slice(1));
+  // Deja que Bun vacíe el sobre JSON antes de terminar, en especial tras mover el .exe activo en Windows.
+  process.exitCode = exitCode;
+} else {
+  // Cualquier otro caso es una corrida: se lee el lote de stdin y se termina con el código que devuelve `runCli`.
+  const stdinText = await readStdin();
+  const { exitCode } = await runCli(stdinText, (line) => console.log(line));
   process.exit(exitCode);
 }
-
-// Cualquier otro caso es una corrida: se lee el lote de stdin, se corre y se termina con el código que devuelve `runCli`.
-const stdinText = await readStdin();
-const { exitCode } = await runCli(stdinText, (line) => console.log(line));
-process.exit(exitCode);

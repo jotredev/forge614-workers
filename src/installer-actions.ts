@@ -163,7 +163,7 @@ export function cleanupStaleWindowsLaunchers(options: { env?: Record<string, str
         ? /^\.forge614-workers-old-.+\.exe$/i.test(entry.name)
         : /^forge614-workers\.exe\.old-.+$/i.test(entry.name);
       if (!entry.isFile() || !stale) continue;
-      try { rmSync(join(directory, entry.name), { force: true }); } catch { /* La limpieza de restos no debe interrumpir la orden. */ }
+      try { rmSync(join(directory, entry.name), { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* La limpieza de restos no debe interrumpir la orden. */ }
     }
   }
 }
