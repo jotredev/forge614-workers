@@ -69,6 +69,10 @@ jobs:
           [System.IO.File]::WriteAllText($targetPackagePath, $targetPackageJson, [System.Text.UTF8Encoding]::new($false))
           bun build (Join-Path $targetSource "main.ts") --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-1.1.1.exe
           if ($LASTEXITCODE -ne 0) { throw "Could not build target Workers" }
+      - name: Measure deferred Windows removal outside bun test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/e2e/windows-deferred-removal-diagnostic.ps1
       - run: bun run verify
       - run: bun run build:target
         env: { FORGE614_TARGET: "${{ matrix.target }}" }
