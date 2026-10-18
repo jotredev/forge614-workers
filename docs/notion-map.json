@@ -1,6 +1,7 @@
 {
   "project": "forge614-workers",
   "repository": "jotredev/forge614-workers",
+  "productVersion": "1.1.0",
   "reviewedProductVersion": "0.1.0",
   "notionHub": "https://app.notion.com/p/3e221943d12981a8b72af5059665ad3b?pvs=204",
   "category": "AI Engineer / Librerías",
