@@ -80,6 +80,31 @@ describe("installer actions", () => {
     }
   });
 
+  test("restores the active Windows executable when a successful gatekeeper makes no replacement", async () => {
+    const homes = fakeHomes();
+    const release = serveWindowsGatekeeper("exit 0\r\n");
+    try {
+      const result = await updateInstalledWorkers("1.0.2", {
+        env: { ...homes.env, FORGE614_INSTALL_TEST_BASE_URL: release.baseUrl },
+        platform: "win32",
+        processExecPath: homes.launcher,
+        versionTag: "v1.1.1",
+        run: () => ({ exitCode: 0, stdout: "", stderr: "" }),
+        readInstalledVersion: () => {
+          if (!existsSync(homes.launcher)) throw new Error("installed launcher was not restored");
+          return "1.0.2";
+        },
+      });
+
+      expect(result).toEqual({ updated: false, previousVersion: "1.0.2", installedVersion: "1.0.2" });
+      expect(readFileSync(homes.launcher, "utf8")).toBe("old workers executable");
+      expect(readdirSync(join(homes.workers, "bin"))).toEqual(["forge614-workers.exe"]);
+    } finally {
+      release.server.stop(true);
+      rmSync(homes.root, { recursive: true, force: true });
+    }
+  });
+
   test("uninstalls from Windows and schedules deletion of its active executable copy", async () => {
     const homes = fakeHomes();
     const release = serveWindowsGatekeeper("# fake installer\n");

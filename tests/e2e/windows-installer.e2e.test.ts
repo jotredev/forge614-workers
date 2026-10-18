@@ -88,7 +88,7 @@ function createContext(options: { noOpUpdate?: boolean } = {}) {
 /** Instala la versión 1.1.0 mediante el portero PowerShell de la publicación local. */
 async function installWorkers(context: ReturnType<typeof createContext>): Promise<void> {
   const result = await run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "install.ps1"), "--version", "v1.1.0"], context.env, context.root);
-  expect(result.status).toBe(0);
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
   expect(result.stderr).toBe("");
   expect(existsSync(context.launcher)).toBe(true);
 }
@@ -110,7 +110,7 @@ describe("Workers Windows installer end-to-end", () => {
       expect(existsSync(context.enginesPath)).toBe(true);
     } finally {
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
     }
   }, 120_000);
 
@@ -119,14 +119,14 @@ describe("Workers Windows installer end-to-end", () => {
     try {
       await installWorkers(context);
       const update = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
-      expect(update.status).toBe(0);
+      expect(update.status, `${update.stdout}\n${update.stderr}`).toBe(0);
       expect(JSON.parse(update.stdout.trim())).toEqual({ schemaVersion: 1, updated: true, previousVersion: "1.1.0", installedVersion: "1.1.1" });
       const version = await run([context.launcher, "--version"], context.env, context.root);
       expect(version.stdout.trim()).toBe("forge614-workers 1.1.1");
       expect(readdirSync(join(context.forgeHome, "workers", "bin")).some((name) => name.includes(".old-"))).toBe(false);
     } finally {
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
     }
   }, 120_000);
 
@@ -135,7 +135,7 @@ describe("Workers Windows installer end-to-end", () => {
     try {
       prepareInstalledLauncher(context);
       const update = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
-      expect(update.status).toBe(0);
+      expect(update.status, `${update.stdout}\n${update.stderr}`).toBe(0);
       expect(JSON.parse(update.stdout.trim())).toEqual({ schemaVersion: 1, updated: false, previousVersion: "1.1.0", installedVersion: "1.1.0" });
       const version = await run([context.launcher, "--version"], context.env, context.root);
       expect(version.stdout.trim()).toBe("forge614-workers 1.1.0");
@@ -144,7 +144,7 @@ describe("Workers Windows installer end-to-end", () => {
       expect(context.release.requests).toContain("/repos/jotredev/forge614-workers/releases/download/v1.1.1/SHA256SUMS");
     } finally {
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
     }
   }, 120_000);
 
@@ -154,19 +154,19 @@ describe("Workers Windows installer end-to-end", () => {
       await installWorkers(context);
       const requestsBeforeInsideUninstall = [...context.release.requests];
       const inside = await run([context.launcher, "uninstall", "--json"], context.env, context.workers);
-      expect(inside.status).toBe(1);
+      expect(inside.status, `${inside.stdout}\n${inside.stderr}`).toBe(1);
       expect(JSON.parse(inside.stderr.trim())).toMatchObject({ schemaVersion: 1, code: "UNINSTALL_FAILED" });
       expect(existsSync(context.launcher)).toBe(true);
       expect(context.release.requests).toEqual(requestsBeforeInsideUninstall);
 
       const outside = await run([context.launcher, "uninstall", "--json"], context.env, context.root);
-      expect(outside.status).toBe(0);
+      expect(outside.status, `${outside.stdout}\n${outside.stderr}`).toBe(0);
       expect(JSON.parse(outside.stdout.trim())).toEqual({ schemaVersion: 1, result: { removed: true } });
       expect(existsSync(context.workers)).toBe(false);
       expect(existsSync(context.enginesPath)).toBe(true);
     } finally {
       context.release.server.stop(true);
-      rmSync(context.root, { recursive: true, force: true });
+      rmSync(context.root, { recursive: true, force: true, maxRetries: 30, retryDelay: 100 });
     }
   }, 120_000);
 });

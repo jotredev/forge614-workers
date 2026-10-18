@@ -275,7 +275,11 @@ async function runInstallerGate(action: InstallerAction, options: InstallerActio
           });
         } else scheduleWindowsLauncherRemoval(parked.parked, options.processId ?? process.pid, env);
       } else if (action === "update" && parked) {
-        if (existsSync(parked.parked)) rmSync(parked.parked, { force: true });
+        if (existsSync(parked.original)) {
+          if (existsSync(parked.parked)) rmSync(parked.parked, { force: true });
+        } else {
+          restoreWindowsLauncher(parked);
+        }
       }
     } catch (error) {
       restoreWindowsLauncher(parked);
