@@ -23,6 +23,12 @@ En Windows, el ejecutable de `workers/bin/` puede estar en uso mientras Atlas pr
 
 Los fallos se emiten como JSON en stderr con código `UNINSTALL_FAILED`; argumentos inválidos usan `INVALID_ARGUMENTS`. `uninstall --self` es la respuesta requerida por `install.mjs` y no borra archivos.
 
+En Windows, tras `uninstall`, puede quedar `FORGE614_HOME\.forge614-workers-old-*.exe` porque el proceso PowerShell diferido puede terminar junto con Workers. Cierra Workers y sus procesos activos, abre PowerShell y borra esos ejecutables aparcados con:
+
+```powershell
+Get-ChildItem -LiteralPath $env:FORGE614_HOME -Filter '.forge614-workers-old-*.exe' -File | Remove-Item -Force
+```
+
 ## Lote NDJSON
 
 Los códigos del lote siguen siendo `0`, `1`, `2` y `75`; los errores de argumentos y los nuevos comandos no cambian el formato de eventos NDJSON. Consulta [05. Errores, cuotas y códigos de salida](05-errors-and-quotas.md) para códigos como `timeout`, `spawn_error` y `generic_error`.

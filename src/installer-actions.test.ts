@@ -133,12 +133,8 @@ describe("installer actions", () => {
       expect(parked?.startsWith(homes.workers)).toBe(false);
       expect(existsSync(parked ?? "")).toBe(true);
       const script = Buffer.from(scheduled?.args.at(-1) ?? "", "base64").toString("utf16le");
-      expect(script).toContain("Start-Process -FilePath $powershell");
-      expect(script).toContain("System32\\WindowsPowerShell\\v1.0\\powershell.exe");
-      const removalEncoded = /'-EncodedCommand','([^']+)'/.exec(script)?.[1] ?? "";
-      const removalScript = Buffer.from(removalEncoded, "base64").toString("utf16le");
-      expect(removalScript).toContain("Wait-Process -Id 4321 -Timeout 30");
-      expect(removalScript).toContain("Start-Sleep -Milliseconds 250");
+      expect(script).toContain("Wait-Process -Id 4321 -Timeout 30");
+      expect(script).toContain("Start-Sleep -Milliseconds 250");
     } finally {
       release.server.stop(true);
       rmSync(homes.root, { recursive: true, force: true });

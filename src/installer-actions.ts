@@ -244,9 +244,7 @@ function restoreWindowsLauncher(parked: { original: string; parked: string } | u
 
 /** Crea la orden PowerShell que borra con reintentos el .exe aparcado al terminar Workers. */
 function windowsLauncherRemovalCommand(processId: number): { command: string; args: string[] } {
-  const removalScript = `try { Wait-Process -Id ${processId} -Timeout 30 -ErrorAction SilentlyContinue } catch {}; for ($attempt = 0; $attempt -lt 30; $attempt++) { Remove-Item -LiteralPath $env:FORGE614_WORKERS_PARKED -Force -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath $env:FORGE614_WORKERS_PARKED)) { break }; Start-Sleep -Milliseconds 250 }`;
-  const removalEncoded = Buffer.from(removalScript, "utf16le").toString("base64");
-  const script = `$powershell = Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'; Start-Process -FilePath $powershell -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-NonInteractive','-EncodedCommand','${removalEncoded}') -WindowStyle Hidden`;
+  const script = `try { Wait-Process -Id ${processId} -Timeout 30 -ErrorAction SilentlyContinue } catch {}; for ($attempt = 0; $attempt -lt 30; $attempt++) { Remove-Item -LiteralPath $env:FORGE614_WORKERS_PARKED -Force -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath $env:FORGE614_WORKERS_PARKED)) { break }; Start-Sleep -Milliseconds 250 }`;
   const encoded = Buffer.from(script, "utf16le").toString("base64");
   return {
     command: "powershell.exe",

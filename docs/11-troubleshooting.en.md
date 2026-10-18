@@ -23,6 +23,12 @@ On Windows, the executable in `workers/bin/` may be in use while Atlas processes
 
 Failures are JSON on stderr with code `UNINSTALL_FAILED`; invalid arguments use `INVALID_ARGUMENTS`. `uninstall --self` is required by `install.mjs` and removes no files.
 
+On Windows, `uninstall` may leave `FORGE614_HOME\.forge614-workers-old-*.exe` because the deferred PowerShell process may exit with Workers. Close Workers and its active processes, open PowerShell, and remove the parked executables with:
+
+```powershell
+Get-ChildItem -LiteralPath $env:FORGE614_HOME -Filter '.forge614-workers-old-*.exe' -File | Remove-Item -Force
+```
+
 ## NDJSON batches
 
 Batch exit codes remain `0`, `1`, `2`, and `75`; command argument errors and the new commands do not change the NDJSON event format. See [05. Errors, quotas, and exit codes](05-errors-and-quotas.en.md) for batch reasons such as `timeout`, `spawn_error`, and `generic_error`.
