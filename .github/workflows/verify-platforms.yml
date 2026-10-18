@@ -1,0 +1,98 @@
+name: verify-platforms
+on:
+  pull_request:
+  push: { branches: [main] }
+jobs:
+  platform-checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      HOME: ${{ runner.temp }}/forge614-home
+      FORGE614_HOME: ${{ runner.temp }}/forge614-home/.forge614
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with: { bun-version: "1.4.2" }
+      - run: bun install --frozen-lockfile
+      - run: mkdir -p "$HOME" "$FORGE614_HOME"
+      - name: Install the pinned Forge614 Engines binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) combo=linux-x64 ;;
+            Linux-ARM64) combo=linux-arm64 ;;
+            macOS-ARM64) combo=darwin-arm64 ;;
+            macOS-X64) combo=darwin-x64 ;;
+            *) echo "Unsupported runner: $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          name="forge614-engines-1.17.0-$combo"
+          base="https://github.com/jotredev/forge614-engines/releases/download/v1.17.0"
+          dir="$RUNNER_TEMP/engines"
+          mkdir -p "$dir"
+          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz" "$base/$name.tar.gz"
+          curl --fail --location --silent --show-error --output "$dir/$name.tar.gz.sha256" "$base/$name.tar.gz.sha256"
+          (cd "$dir" && shasum -a 256 -c "$name.tar.gz.sha256")
+          tar -xzf "$dir/$name.tar.gz" -C "$dir"
+          bin="$dir/$name/forge614-engines"
+          test -x "$bin"
+          "$bin" capabilities --agent claude-code | grep -Eq '"supportsReadOnly": *true'
+          echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
+      - run: bun run verify
+      - run: git diff --check
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      HOME: ${{ runner.temp }}/forge614-home
+      FORGE614_HOME: ${{ runner.temp }}/forge614-home/.forge614
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+        with: { bun-version: "1.4.2" }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: "22.19.0" }
+      - run: bun install --frozen-lockfile
+      - name: Create isolated test homes
+        run: |
+          $forgeHome = Join-Path $env:RUNNER_TEMP "forge614-home"
+          $forge614Home = Join-Path $forgeHome ".forge614"
+          New-Item -ItemType Directory -Force -Path $forgeHome, $forge614Home | Out-Null
+          "HOME=$forgeHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FORGE614_HOME=$forge614Home" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Compile portable Windows test fixtures
+        run: |
+          Get-ChildItem test/fixtures/*.js | ForEach-Object {
+            bun build --compile --target=bun-windows-x64 $_.FullName --outfile "$($_.FullName).exe"
+            if ($LASTEXITCODE -ne 0) { throw "Could not compile fixture $($_.Name)" }
+          }
+      - name: Build Windows installer end-to-end assets
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/windows-e2e | Out-Null
+          bun build ./src/main.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-windows-x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not build Workers" }
+          bun build ./test/fixtures/fake-engines-windows.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-engines.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not build fake Engines" }
+          bun build ./test/fixtures/fake-workers-1.1.1.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-1.1.1.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not build target Workers" }
+      - name: Install the pinned Forge614 Engines binary
+        run: |
+          $name = "forge614-engines-1.17.0-windows-x64.tar.gz"
+          $base = "https://github.com/jotredev/forge614-engines/releases/download/v1.17.0"
+          $dir = Join-Path $env:RUNNER_TEMP "engines"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Invoke-WebRequest "$base/$name" -OutFile (Join-Path $dir $name)
+          Invoke-WebRequest "$base/$name.sha256" -OutFile (Join-Path $dir "$name.sha256")
+          $expected = ((Get-Content (Join-Path $dir "$name.sha256") -Raw).Trim() -split '\s+')[0]
+          $actual = (Get-FileHash (Join-Path $dir $name) -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Engines checksum mismatch" }
+          tar -xzf (Join-Path $dir $name) -C $dir
+          $binary = Join-Path $dir "forge614-engines-1.17.0-windows-x64/forge614-engines.exe"
+          if (-not (Test-Path $binary)) { throw "Engines executable missing" }
+          "FORGE614_ENGINES_BIN=$binary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - run: bun run verify
+      - run: git diff --check
