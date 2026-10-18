@@ -67,12 +67,22 @@ function digest(bytes: Uint8Array): string {
 /** Ejecuta el portero Unix o Workers con carpetas aisladas y captura sus salidas. */
 async function run(command: string[], env: Record<string, string>, cwd?: string): Promise<{ stdout: string; stderr: string; status: number }> {
   const process = Bun.spawn(command, { cwd, env: { ...globalThis.process.env, ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, status] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited,
-  ]);
-  return { stdout, stderr, status };
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    process.kill();
+  }, 110_000);
+  try {
+    const [stdout, stderr, status] = await Promise.all([
+      new Response(process.stdout).text(),
+      new Response(process.stderr).text(),
+      process.exited,
+    ]);
+    if (timedOut) throw new Error(`Process exceeded its 110 s limit: ${command[0]}`);
+    return { stdout, stderr, status };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 describe("Workers installer end-to-end", () => {
@@ -118,5 +128,5 @@ describe("Workers installer end-to-end", () => {
       release.server.stop(true);
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 });

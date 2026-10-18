@@ -178,6 +178,7 @@ describe("runProcess", () => {
    * Lanza `ignore-sigterm.js` (que ignora SIGTERM y no termina nunca) con límite de 50 ms y gracia de 50 ms, y
    * comprueba que el resultado es `timeout`. Importa porque demuestra que tras la gracia se usa SIGKILL; sin él la prueba se colgaría.
    */
+  // Windows no admite este caso POSIX: ignorar SIGTERM y escalar a SIGKILL no tiene el mismo contrato allí.
   test.skipIf(process.platform === "win32")("kills a process that ignores SIGTERM after the grace period", async () => {
     const result = await runProcess({
       command: process.execPath,

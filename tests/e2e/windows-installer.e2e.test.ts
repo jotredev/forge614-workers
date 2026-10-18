@@ -10,8 +10,9 @@ const DIST = join(ROOT, "dist", "windows-e2e");
 const NODE = join(ROOT, "install.mjs");
 
 /** Levanta una publicación local con el ejecutable 1.1.0 y un ejecutable falso 1.1.1 distinto. */
-function servePublication() {
+function servePublication(options: { noOpUpdate?: boolean } = {}) {
   const assetsByTag = new Map<string, Map<string, Uint8Array>>();
+  const requests: string[] = [];
   for (const [tag, binaryName] of [["v1.1.0", "forge614-workers-windows-x64.exe"], ["v1.1.1", "forge614-workers-windows-x64.exe"]]) {
     const binaryPath = tag === "v1.1.0" ? join(DIST, "forge614-workers-windows-x64.exe") : join(DIST, "forge614-workers-1.1.1.exe");
     const assets = new Map<string, Uint8Array>([
@@ -21,6 +22,7 @@ function servePublication() {
       ["forge614.node.json", readFileSync(join(ROOT, "forge614.node.json"))],
       [binaryName, readFileSync(binaryPath)],
     ]);
+    if (options.noOpUpdate && tag === "v1.1.1") assets.set("install.ps1", new TextEncoder().encode("exit 0\r\n"));
     assets.set("SHA256SUMS", new TextEncoder().encode([...assets].map(([name, bytes]) => `${digest(bytes)}  ${name}\n`).join("")));
     assetsByTag.set(tag, assets);
   }
@@ -29,6 +31,7 @@ function servePublication() {
     port: 0,
     fetch(request) {
       const path = new URL(request.url).pathname;
+      requests.push(path);
       if (path.endsWith("/releases/latest")) return Response.json({ tag_name: "v1.1.1" });
       const match = /\/releases\/download\/(v1\.1\.\d+)\/([^/]+)$/.exec(path);
       const assets = match ? assetsByTag.get(match[1]!) : undefined;
@@ -36,7 +39,7 @@ function servePublication() {
       return bytes ? new Response(bytes) : new Response("missing", { status: 404 });
     },
   });
-  return { server, baseUrl: `http://127.0.0.1:${server.port}` };
+  return { server, baseUrl: `http://127.0.0.1:${server.port}`, requests };
 }
 
 /** Calcula la huella SHA-256 en minúsculas de un activo de prueba. */
@@ -47,18 +50,28 @@ function digest(bytes: Uint8Array): string {
 /** Ejecuta un proceso con carpetas HOME aisladas y captura ambas salidas. */
 async function run(command: string[], env: Record<string, string>, cwd?: string): Promise<{ stdout: string; stderr: string; status: number }> {
   const child = Bun.spawn(command, { cwd, env: { ...process.env, ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  return { stdout, stderr, status };
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill();
+  }, 110_000);
+  try {
+    const [stdout, stderr, status] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    if (timedOut) throw new Error(`Process exceeded its 110 s limit: ${command[0]}`);
+    return { stdout, stderr, status };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Prepara HOME y Engines falsos para una prueba end-to-end independiente. */
-function createContext() {
+function createContext(options: { noOpUpdate?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), "forge614-workers-windows-e2e-"));
   const forgeHome = join(root, ".forge614");
   const enginesPath = join(forgeHome, "engines", "bin", "forge614-engines.exe");
   const workers = join(forgeHome, "workers");
   const launcher = join(workers, "bin", "forge614-workers.exe");
-  const release = servePublication();
+  const release = servePublication(options);
   mkdirSync(join(forgeHome, "engines", "bin"), { recursive: true });
   copyFileSync(join(DIST, "forge614-engines.exe"), enginesPath);
   return {
@@ -99,12 +112,12 @@ describe("Workers Windows installer end-to-end", () => {
       context.release.server.stop(true);
       rmSync(context.root, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 
   test.skipIf(process.platform !== "win32")("updates from the active bin executable and removes its parked copy", async () => {
     const context = createContext();
     try {
-      prepareInstalledLauncher(context);
+      await installWorkers(context);
       const update = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
       expect(update.status).toBe(0);
       expect(JSON.parse(update.stdout.trim())).toEqual({ schemaVersion: 1, updated: true, previousVersion: "1.1.0", installedVersion: "1.1.1" });
@@ -115,16 +128,36 @@ describe("Workers Windows installer end-to-end", () => {
       context.release.server.stop(true);
       rmSync(context.root, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
+
+  test.skipIf(process.platform !== "win32")("reports updated false when the checked local gatekeeper leaves the installed version unchanged", async () => {
+    const context = createContext({ noOpUpdate: true });
+    try {
+      prepareInstalledLauncher(context);
+      const update = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
+      expect(update.status).toBe(0);
+      expect(JSON.parse(update.stdout.trim())).toEqual({ schemaVersion: 1, updated: false, previousVersion: "1.1.0", installedVersion: "1.1.0" });
+      const version = await run([context.launcher, "--version"], context.env, context.root);
+      expect(version.stdout.trim()).toBe("forge614-workers 1.1.0");
+      expect(readdirSync(join(context.forgeHome, "workers", "bin")).some((name) => name.includes(".old-"))).toBe(false);
+      expect(context.release.requests).toContain("/repos/jotredev/forge614-workers/releases/download/v1.1.1/install.ps1");
+      expect(context.release.requests).toContain("/repos/jotredev/forge614-workers/releases/download/v1.1.1/SHA256SUMS");
+    } finally {
+      context.release.server.stop(true);
+      rmSync(context.root, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   test.skipIf(process.platform !== "win32")("refuses an in-tree uninstall, then removes Workers from outside", async () => {
     const context = createContext();
     try {
-      prepareInstalledLauncher(context);
+      await installWorkers(context);
+      const requestsBeforeInsideUninstall = [...context.release.requests];
       const inside = await run([context.launcher, "uninstall", "--json"], context.env, context.workers);
       expect(inside.status).toBe(1);
       expect(JSON.parse(inside.stderr.trim())).toMatchObject({ schemaVersion: 1, code: "UNINSTALL_FAILED" });
       expect(existsSync(context.launcher)).toBe(true);
+      expect(context.release.requests).toEqual(requestsBeforeInsideUninstall);
 
       const outside = await run([context.launcher, "uninstall", "--json"], context.env, context.root);
       expect(outside.status).toBe(0);
@@ -135,5 +168,5 @@ describe("Workers Windows installer end-to-end", () => {
       context.release.server.stop(true);
       rmSync(context.root, { recursive: true, force: true });
     }
-  });
+  }, 120_000);
 });
