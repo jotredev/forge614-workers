@@ -53,6 +53,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/windows-e2e | Out-Null
+          bun build ./test/fixtures/detached-powershell-probe.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/detached-powershell-probe.exe
+          if ($LASTEXITCODE -ne 0) { throw "Could not build detached PowerShell probe" }
           bun build ./src/main.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-windows-x64.exe
           if ($LASTEXITCODE -ne 0) { throw "Could not build Workers" }
           bun build ./test/fixtures/fake-engines-windows.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-engines.exe
