@@ -12,34 +12,34 @@ bun run typecheck
 bun run build
 ```
 
-`bun build --compile` genera `dist/forge614-workers`.
+`bun build --compile` genera `dist/forge614-workers`. Para release se usan `bun run build:target` y `bun run smoke:target` con `FORGE614_TARGET`.
 
-El binario responde `forge614-workers --version` (o `-v`), que imprime `forge614-workers <versión>`, y `--help` (o `-h`), que imprime una ayuda corta; ambos salen con código 0 sin esperar la entrada estándar. El binario también responde `forge614-workers update`: descarga el `install.sh` de la última release (`https://github.com/jotredev/forge614-workers/releases/latest/download/install.sh`) y lo corre con `--force`, como hace `forge614-engram update`. Se atiende antes de leer stdin, no acepta argumentos (con alguno sale con 2), muestra los mensajes del instalador y termina con una línea con la versión del binario que corre y la nueva (o que ya está al día); sale con 1 si fallan la descarga, el instalador o la lectura de la versión instalada. Con cualquier otro primer argumento sigue esperando el lote por stdin. La versión se lee de `package.json`, la única fuente.
+`--version`, `--version --json`, `update [--version X.Y.Z] [--json]` y `uninstall [--json|--self]` se procesan antes de leer stdin. Los comandos de gestión emiten JSON en modo `--json` y códigos de error estables. Windows x64 usa terminación directa de proceso al vencer un tiempo límite; la prueba que exige ignorar SIGTERM solo corre en Unix.
 
 ## Integración continua
 
-`.github/workflows/verify.yml` corre en cada push y en cada pull request, en Ubuntu y macOS con Bun 1.4.2: `bun test`, `bun run typecheck`, `git diff --check` y `bash -n scripts/install.sh`. Las pruebas que usan Engines real reciben un Forge614 Engines **1.17.0 fijo**: el workflow descarga su release, verifica su `.sha256`, comprueba que `capabilities --agent claude-code` trae `"supportsReadOnly": true` y apunta `FORGE614_ENGINES_BIN` al binario. No se salta ninguna prueba; subir esa versión fija es una decisión deliberada y se hace a la vez en `verify.yml` y en `release.yml` (`ENGINES_VERSION`).
+`.github/workflows/verify.yml` verifica Ubuntu y Windows con Bun 1.4.2, y fija Forge614 Engines 1.17.0 para las pruebas de integración. Windows se prueba en CI solamente, no en una máquina real.
 
 ## Instalación y publicación
 
-`scripts/install.sh` instala una release verificada. Comprueba el sha256 contra `SHA256SUMS`, y **antes** de tocar la carpeta de Workers se asegura de que haya un Engines compatible (ejecutable, `--version` 1.17.0 o posterior y `supportsReadOnly: true`) en `$FORGE614_HOME/engines/bin/forge614-engines`, comprobado con `capabilities --agent claude-code`; si falta o no sirve, instala el último con el `install.sh` publicado de Engines y vuelve a comprobar, y si aun así no sirve no instala nada de Workers. Deja el binario en `$FORGE614_HOME/workers/<versión>/forge614-workers` (por defecto `~/.forge614/workers/<versión>/forge614-workers`) y cambia de forma atómica el enlace `workers/bin/forge614-workers` a esa versión; las versiones anteriores se conservan. Sin `--force`, reinstalar la versión activa solo dice que ya está activa. No modifica el PATH: Workers es una dependencia interna que Atlas llama por la ruta absoluta `~/.forge614/workers/bin/forge614-workers` (Atlas no lee `FORGE614_HOME`). Sus pruebas (`scripts/__tests__/install.sh.test.ts`) usan un HOME temporal y dobles de la API de releases y de Engines, nunca el HOME real.
+Los porteros `install.sh` e `install.ps1` descargan y verifican `install.mjs`, la ficha y los binarios según `forge614.node.json`. Se requiere Node.js 22.19.0. El instalador comprueba Engines antes de instalar Workers; Windows publica una copia `.exe` en `workers/bin/`, mientras Unix usa un enlace. La e2e usa `HOME` y `FORGE614_HOME` temporales y servidor de loopback.
 
-`.github/workflows/release.yml` verifica, compila los binarios de macOS arm64 y x64 y de Linux x64 y arm64 (prueba rápida de cada uno: `--version` igual a `package.json` y un lote vacío que termina con `run_completed`), genera `SHA256SUMS` y publica solo con una etiqueta `v*`. También corre, sin publicar, en los pull requests que tocan `release.yml` o `install.sh`. En cada corrida comprueba que `CHANGELOG.md` tenga la entrada `## <versión>` de `package.json`, y con una etiqueta comprueba además que coincida con `package.json`; `publish` no corre si algo falla. También se puede lanzar a mano (`workflow_dispatch`), sin publicar. Una etiqueta con guion (por ejemplo `v1.1.0-rc.1`) se publica como prerelease, y `releases/latest`, por tanto el instalador y `update`, no la toma. No hay script de publicación: subir de versión es editar `package.json`, `CHANGELOG.md` y la línea de versión de `docs/08` (es/en), y la prueba `test/versions.test.ts` exige que digan lo mismo.
+`.github/workflows/release.yml` compila cinco binarios nativos (macOS/Linux x64 y arm64, Windows x64), ejecuta `smoke:target`, prepara diez activos y publica solo el tag que coincide con `package.json` mediante `release:publish`.
 
 ## Qué debe cubrirse
 
 - Orden estrictamente secuencial y pausa inmediata por cuota.
 - `run_completed` en todo camino no fatal.
-- Timeout con `SIGTERM` y posterior `SIGKILL`.
+- Timeout con terminación forzada; la prueba que ignora `SIGTERM` solo corre en Unix.
 - Truncamiento con conteo real de bytes.
 - cwd vacío, herencia completa de entorno y limpieza temporal.
 - spawn error, JSON inválido y binario Engines no ejecutable.
 - Registro completo: todo agente headless de Engines tiene adapter.
 - Candado de solo lectura: una tarea `readOnly` sin candado confirmado no lanza ninguna orden.
 - Validación de `readOnly` (solo `true`/`false`/ausente) y de los cinco niveles de razonamiento.
-- `--version`, `--help` y `update` sin leer stdin.
-- `update` con dobles (sin red ni instalador real): descarga fallida con mensaje claro y salida no cero, instalador ejecutado con `--force` y archivo descargado limpiado.
-- Instalador: instalación limpia, reinstalar sin `--force`, `--force`, Engines ausente, viejo o sin candado, sha256 que no coincide y PATH intacto.
+- `--version --json`, `update` con un portero local verificado y `uninstall` sin borrar Engines.
+- E2E de instalación, actualización y desinstalación mediante loopback y homes temporales.
+- Windows x64 instala, actualiza desde el ejecutable activo y desinstala en CI.
 - `FORGE614_HOME` absoluto respetado y relativo rechazado.
 - Versiones alineadas entre `package.json`, `docs/08` (es/en) y `CHANGELOG.md`.
 

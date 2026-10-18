@@ -13,13 +13,13 @@
 | **Engines** | Binary named by `enginesBin`; Workers uses it to resolve `headless` and query `capabilities` when read-only must be confirmed (`src/engines-client.ts:43-128,135-165`). |
 | **Event** | Output object describing start, completion, failure, quota, summary, or fatal error. The closed set is `TaskEvent` (`src/types.ts:55-107`). |
 | **Failure reason** | `reason` field of `task_failed`: `timeout`, `engine_unsupported`, `spawn_error`, or `generic_error` (`src/types.ts:48-53,70-81`). |
-| **`FORGE614_HOME`** | Installation root. The installer and `update` use its non-empty absolute value or `$HOME/.forge614`; `update` rejects relative paths before downloading (`scripts/install.sh:140-147`; `src/updater.ts:36-49,97-108`). |
+| **`FORGE614_HOME`** | Installation root. The installer and `update` use its non-empty absolute value or `$HOME/.forge614`; `update` rejects relative paths before downloading (`src/installer-actions.ts:74-77`; `src/updater.ts:18-24`). |
 | **Headless** | Resolution of a command for non-interactive execution. Workers requests `headless --agent … --executable … --stdin-prompt`, validates the fields it consumes, and then runs the answer (`src/engines-client.ts:43-128`; `src/runner.ts:149-209,204-205`). |
 | **NDJSON** | Output format: one serialized JSON object per line. `runCli` applies `JSON.stringify` to every event before passing it to `writeLine` (`src/cli.ts:60-68`). |
 | **Quota** | Limit an adapter recognizes only after a non-zero process exit. A match produces `quota_exhausted`, stops the batch, and leaves later tasks not started (`src/runner.ts:247-280,333-341`). |
 | **Readable folder** | `readableDir`: extra folder Workers forwards to Engines as `--readable-dir`; it grants access and does not itself enable the read-only lock (`src/types.ts:23-24`; `src/engines-client.ts:75`). |
 | **Read-only** | `readOnly: true` requires Engines to confirm `supportsReadOnly: true` before resolving or launching the task. Otherwise Workers emits `engine_unsupported` with `READ_ONLY_UNSUPPORTED` (`src/runner.ts:126-146`). |
-| **SHA-256 digest** | Hexadecimal summary the installer uses to ensure the downloaded binary matches `SHA256SUMS`. There must be exactly one 64-character lowercase entry for the artifact (`scripts/install.sh:261-274`). |
+| **SHA-256 digest** | Hexadecimal summary the command checks against the single strict GNU `SHA256SUMS` entry for the gatekeeper (`src/installer-actions.ts:177-186`). |
 | **Task** | Batch unit with `id`, `agentId`, `executable`, `prompt`, access/model/reasoning options, and timeout (`src/types.ts:13-36`). |
 | **Temporary working directory** | New empty folder in which a task runs. It is created under the system temporary folder and always removed; it changes `cwd` but does not isolate the environment or the rest of the disk (`src/process-runner.ts:99-106,174-177`). |
 | **Timeout** | Result when the process exceeds `timeoutMs`; SIGTERM is sent, the grace period is observed, and SIGKILL may follow. The task fails but the batch continues (`src/process-runner.ts:149-172`; `src/runner.ts:228-242`). |
