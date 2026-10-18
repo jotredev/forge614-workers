@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "node": "workers",
+  "kind": "product",
+  "standard": {
+    "version": "1.2.1",
+    "sha256": "357f26a5391cfcd5abc48abe1bd750db1a540e95b511f6bd12ac681a1527100e"
+  },
+  "ecosystem": "forge614",
+  "install": {
+    "repository": "jotredev/forge614-workers",
+    "minimumNodeVersion": "22.19.0",
+    "systems": [
+      { "os": "darwin", "architectures": ["arm64", "x64"] },
+      { "os": "linux", "architectures": ["arm64", "x64"] },
+      { "os": "windows", "architectures": ["x64"] }
+    ],
+    "tagFormat": "vX.Y.Z",
+    "asset": {
+      "type": "raw-binary",
+      "pattern": "forge614-workers-<plat>-<arch>[.exe]",
+      "checksumFile": "SHA256SUMS"
+    },
+    "dependencies": [
+      {
+        "node": "engines",
+        "minimumVersion": "1.17.0",
+        "requiredCapabilities": [
+          { "agent": "claude-code", "field": "supportsReadOnly" }
+        ],
+        "compatibility": "version-and-capabilities"
+      }
+    ],
+    "path": { "modify": false, "retireWhen": null },
+    "smokeTest": ["--version"]
+  }
+}

@@ -7,7 +7,7 @@ import { describe, test, expect } from "bun:test";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { runProcess } from "./process-runner";
-import { fixturePath } from "../test/support/fixture-path";
+import { fixtureScriptPath } from "../test/support/fixture-path";
 
 /** Agrupa las pruebas de `runProcess`, el lanzador de procesos hijo con carpeta temporal, tope de salida y tiempo límite. */
 describe("runProcess", () => {
@@ -18,7 +18,7 @@ describe("runProcess", () => {
   test("runs a command, pipes stdin, and captures stdout", async () => {
     const result = await runProcess({
       command: process.execPath,
-      args: [fixturePath("echo-stdin.js")],
+      args: [fixtureScriptPath("echo-stdin.js")],
       stdin: "hello world",
       timeoutMs: 5000,
       maxOutputBytes: 1024,
@@ -38,7 +38,7 @@ describe("runProcess", () => {
   test("cleans up the isolated temp working directory after the process exits", async () => {
     const result = await runProcess({
       command: process.execPath,
-      args: [fixturePath("print-cwd.js")],
+      args: [fixtureScriptPath("print-cwd.js")],
       stdin: "",
       timeoutMs: 5000,
       maxOutputBytes: 1024,
@@ -64,7 +64,7 @@ describe("runProcess", () => {
     // eso y aun así resolver, en lugar de lanzar o rechazar con un error sin atender.
     const result = await runProcess({
       command: process.execPath,
-      args: [fixturePath("exit-immediately.js")],
+      args: [fixtureScriptPath("exit-immediately.js")],
       stdin: "x".repeat(2_000_000),
       timeoutMs: 5000,
       maxOutputBytes: 1024,
@@ -93,7 +93,7 @@ describe("runProcess", () => {
     const startedAt = Date.now();
     const result = await runProcess({
       command: process.execPath,
-      args: [fixturePath("never-reads-stdin.js")],
+      args: [fixtureScriptPath("never-reads-stdin.js")],
       stdin: "x".repeat(5_000_000),
       timeoutMs: 300,
       sigkillGraceMs: 200,
@@ -126,7 +126,7 @@ describe("runProcess", () => {
     try {
       const result = await runProcess({
         command: process.execPath,
-        args: [fixturePath("print-env.js")],
+        args: [fixtureScriptPath("print-env.js")],
         stdin: "",
         timeoutMs: 5000,
         maxOutputBytes: 1024 * 1024,
@@ -160,7 +160,7 @@ describe("runProcess", () => {
   test("truncates stdout at maxOutputBytes and reports the true observed size", async () => {
     const result = await runProcess({
       command: process.execPath,
-      args: [fixturePath("big-output.js"), "1000"],
+      args: [fixtureScriptPath("big-output.js"), "1000"],
       stdin: "",
       timeoutMs: 5000,
       maxOutputBytes: 100,
@@ -178,10 +178,10 @@ describe("runProcess", () => {
    * Lanza `ignore-sigterm.js` (que ignora SIGTERM y no termina nunca) con límite de 50 ms y gracia de 50 ms, y
    * comprueba que el resultado es `timeout`. Importa porque demuestra que tras la gracia se usa SIGKILL; sin él la prueba se colgaría.
    */
-  test("kills a process that ignores SIGTERM after the grace period", async () => {
+  test.skipIf(process.platform === "win32")("kills a process that ignores SIGTERM after the grace period", async () => {
     const result = await runProcess({
       command: process.execPath,
-      args: [fixturePath("ignore-sigterm.js")],
+      args: [fixtureScriptPath("ignore-sigterm.js")],
       stdin: "",
       timeoutMs: 50,
       sigkillGraceMs: 50,

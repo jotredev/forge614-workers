@@ -3,6 +3,7 @@ import { describe, test, expect, beforeAll } from "bun:test";
 import { resolveHeadlessCommand, engineSupportsReadOnly } from "./engines-client";
 import type { ReasoningLevel } from "./types";
 import { resolveEnginesBinForTests } from "../test/support/resolve-engines-bin";
+import { fixturePath } from "../test/support/fixture-path";
 
 /** Agrupa la resolución `headless` (sin interfaz) y verifica los argumentos que Engines construye para cada opción. */
 describe("resolveHeadlessCommand (against the real forge614-engines binary)", () => {
@@ -194,10 +195,7 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
 
   /** Comprueba que una salida no JSON se convierte en `ENGINES_RESPONSE_INVALID`, sin lanzar ni perder el lote. */
   test("reports ENGINES_RESPONSE_INVALID instead of throwing when the binary prints non-JSON stdout", async () => {
-    const fakeBin = new URL(
-      "../test/fixtures/fake-engines-invalid-json.sh",
-      import.meta.url
-    ).pathname;
+    const fakeBin = fixturePath("fake-engines-invalid-json.js");
 
     const result = await resolveHeadlessCommand({
       enginesBin: fakeBin,
@@ -218,7 +216,7 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
     ["null headless", "headless-null"],
   ])("rejects a malformed %s response", async (_shape, agentId) => {
     const result = await resolveHeadlessCommand({
-      enginesBin: new URL("../test/fixtures/fake-engines-malformed-response.js", import.meta.url).pathname,
+      enginesBin: fixturePath("fake-engines-malformed-response.js"),
       agentId,
       executable: "/bin/claude",
       prompt: "hello",
@@ -231,7 +229,7 @@ describe("resolveHeadlessCommand (against the real forge614-engines binary)", ()
 /** Agrupa la comprobación conservadora de solo lectura: solo una garantía explícita puede devolver `true`. */
 describe("engineSupportsReadOnly", () => {
   // Convierte el nombre de un programa falso de `test/fixtures` en su ruta absoluta para cada escenario.
-  const fixture = (name: string) => new URL(`../test/fixtures/${name}`, import.meta.url).pathname;
+  const fixture = (name: string) => fixturePath(name);
 
   /** Comprueba contra Engines real que los dos asistentes registrados declaran soporte de solo lectura. */
   test.each(["claude-code", "codex"])(
@@ -268,7 +266,7 @@ describe("engineSupportsReadOnly", () => {
   /** Comprueba que una salida ilegible de capacidades produce `false`, de modo que un bloqueo dudoso no se use. */
   test("returns false instead of throwing when the binary prints non-JSON stdout", async () => {
     expect(
-      await engineSupportsReadOnly(fixture("fake-engines-invalid-json.sh"), "claude-code")
+      await engineSupportsReadOnly(fixture("fake-engines-invalid-json.js"), "claude-code")
     ).toBe(false);
   });
 

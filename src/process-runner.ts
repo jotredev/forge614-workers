@@ -28,11 +28,11 @@ export interface RunProcessOptions {
   args: string[];
   /** Texto que se escribe en el stdin del proceso y después se cierra; es el prompt de la tarea. */
   stdin: string;
-  /** Milisegundos que el proceso puede tardar; al cumplirse se le pide terminar con SIGTERM (señal de terminación). */
+  /** Milisegundos que el proceso puede tardar; al cumplirse se le pide terminar con SIGTERM o con terminación directa en Windows. */
   timeoutMs: number;
   /** Tope de bytes que se guardan de cada salida (stdout y stderr por separado); lo que sobra se cuenta pero no se guarda. */
   maxOutputBytes: number;
-  /** Milisegundos de gracia tras el SIGTERM antes de matarlo con SIGKILL (señal de muerte que el proceso no puede ignorar); si falta, 5000. */
+  /** Milisegundos de gracia tras la terminación solicitada antes de forzarla; si falta, 5000. */
   sigkillGraceMs?: number;
 }
 
@@ -143,17 +143,19 @@ export async function runProcess(options: RunProcessOptions): Promise<RunProcess
     const stdoutPromise = captureStream(proc.stdout, options.maxOutputBytes);
     const stderrPromise = captureStream(proc.stderr, options.maxOutputBytes);
 
-    // Dos temporizadores: al cumplirse el tiempo se pide terminar (SIGTERM) y se marca el tiempo agotado; si el proceso sigue vivo pasada la gracia, se mata (SIGKILL).
+    // Dos temporizadores: se solicita terminación al agotarse el tiempo; Windows no admite las señales POSIX, así que usa la terminación directa en ambas etapas.
     let timedOut = false;
     const graceMs = options.sigkillGraceMs ?? DEFAULT_SIGKILL_GRACE_MS;
     const termTimer = setTimeout(() => {
       timedOut = true;
-      proc.kill("SIGTERM");
+      if (process.platform === "win32") proc.kill();
+      else proc.kill("SIGTERM");
     }, options.timeoutMs);
     const killTimer = setTimeout(() => {
       if (timedOut) {
         try {
-          proc.kill("SIGKILL");
+          if (process.platform === "win32") proc.kill();
+          else proc.kill("SIGKILL");
         } catch {
           // ya había terminado
         }
