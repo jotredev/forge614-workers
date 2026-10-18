@@ -48,7 +48,7 @@ jobs:
             bun build --compile --target=bun-windows-x64 $_.FullName --outfile $output
             if ($LASTEXITCODE -ne 0) { throw "Could not compile fixture $($_.Name)" }
           }
-      - name: Build Windows installer end-to-end assets
+      - name: Build real Windows installer end-to-end assets
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -57,7 +57,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Could not build Workers" }
           bun build ./test/fixtures/fake-engines-windows.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-engines.exe
           if ($LASTEXITCODE -ne 0) { throw "Could not build fake Engines" }
-          bun build ./test/fixtures/fake-workers-1.1.1.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-1.1.1.exe
+          $targetRoot = Join-Path $env:RUNNER_TEMP "forge614-workers-1.1.1"
+          $targetSource = Join-Path $targetRoot "src"
+          New-Item -ItemType Directory -Force -Path $targetSource | Out-Null
+          Copy-Item -Path "src/*" -Destination $targetSource -Recurse -Force
+          Copy-Item -Path package.json -Destination (Join-Path $targetRoot "package.json") -Force
+          $targetPackagePath = Join-Path $targetRoot "package.json"
+          $targetPackage = Get-Content $targetPackagePath -Raw | ConvertFrom-Json
+          $targetPackage.version = "1.1.1"
+          $targetPackageJson = $targetPackage | ConvertTo-Json -Depth 100
+          [System.IO.File]::WriteAllText($targetPackagePath, $targetPackageJson, [System.Text.UTF8Encoding]::new($false))
+          bun build (Join-Path $targetSource "main.ts") --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-1.1.1.exe
           if ($LASTEXITCODE -ne 0) { throw "Could not build target Workers" }
       - run: bun run verify
       - run: bun run build:target

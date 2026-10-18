@@ -9,7 +9,7 @@ const ROOT = resolve(import.meta.dir, "..", "..");
 const DIST = join(ROOT, "dist", "windows-e2e");
 const NODE = join(ROOT, "install.mjs");
 
-/** Levanta una publicación local con el ejecutable 1.1.0 y un ejecutable falso 1.1.1 distinto. */
+/** Levanta una publicación local con ejecutables Workers reales para 1.1.0 y 1.1.1. */
 function servePublication(options: { noOpUpdate?: boolean } = {}) {
   const assetsByTag = new Map<string, Map<string, Uint8Array>>();
   const requests: string[] = [];
@@ -138,9 +138,8 @@ describe("Workers Windows installer end-to-end", () => {
 
       const nextUpdate = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
       expect(nextUpdate.status, `${nextUpdate.stdout}\n${nextUpdate.stderr}`).toBe(0);
+      expect(JSON.parse(nextUpdate.stdout.trim())).toEqual({ schemaVersion: 1, updated: false, previousVersion: "1.1.1", installedVersion: "1.1.1" });
       expect(existsSync(firstParkedPath)).toBe(false);
-      const parkedAfterNextUpdate = readdirSync(bin).filter((name) => /^forge614-workers\.exe\.old-.+$/.test(name));
-      expect(parkedAfterNextUpdate.length).toBeLessThanOrEqual(1);
       expect((await run([context.launcher, "--version"], context.env, context.root)).stdout.trim()).toBe("forge614-workers 1.1.1");
     } finally {
       context.release.server.stop(true);

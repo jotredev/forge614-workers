@@ -47,7 +47,11 @@ function serveRelease() {
   return { server, baseUrl: `http://127.0.0.1:${server.port}` };
 }
 
-/** Crea un lanzador de shell mínimo que responde a versión y a la retirada propia. */
+/**
+ * Crea un shim para verificar versiones y la retirada propia del portero.
+ * Tras el update, la prueba ejecuta `uninstall --json` desde `src/main.ts`; el portero solo llama a `uninstall --self`,
+ * cuyo contrato real es una respuesta fija porque Workers no tiene integraciones propias que retirar.
+ */
 function binaryForVersion(version: string): Uint8Array {
   return new TextEncoder().encode(`#!/bin/sh\nif [ "$1" = --version ]; then echo 'forge614-workers ${version}'; exit 0; fi\nif [ "$1" = uninstall ] && [ "$2" = --self ]; then echo '{"schemaVersion":1,"result":{"integrationsRemoved":true}}'; exit 0; fi\nexit 0\n`);
 }
