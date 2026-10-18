@@ -10,17 +10,13 @@ jobs:
         os: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
-    env:
-      HOME: ${{ runner.temp }}/forge614-home
-      FORGE614_HOME: ${{ runner.temp }}/forge614-home/.forge614
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
         with: { bun-version: "1.4.2" }
       - run: bun install --frozen-lockfile
-      - run: mkdir -p "$HOME" "$FORGE614_HOME"
+      - run: mkdir -p "$RUNNER_TEMP/forge614-home" "$RUNNER_TEMP/forge614-home/.forge614"
       - name: Install the pinned Forge614 Engines binary
-        shell: bash
         run: |
           set -euo pipefail
           case "$RUNNER_OS-$RUNNER_ARCH" in
@@ -42,14 +38,11 @@ jobs:
           test -x "$bin"
           "$bin" capabilities --agent claude-code | grep -Eq '"supportsReadOnly": *true'
           echo "FORGE614_ENGINES_BIN=$bin" >> "$GITHUB_ENV"
-      - run: bun run verify
+      - run: HOME="$RUNNER_TEMP/forge614-home" FORGE614_HOME="$RUNNER_TEMP/forge614-home/.forge614" bun run verify
       - run: git diff --check
   windows:
     runs-on: windows-latest
     timeout-minutes: 20
-    env:
-      HOME: ${{ runner.temp }}/forge614-home
-      FORGE614_HOME: ${{ runner.temp }}/forge614-home/.forge614
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
@@ -58,18 +51,19 @@ jobs:
         with: { node-version: "22.19.0" }
       - run: bun install --frozen-lockfile
       - name: Create isolated test homes
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path $env:HOME, $env:FORGE614_HOME | Out-Null
+          $forgeHome = Join-Path $env:RUNNER_TEMP "forge614-home"
+          $forge614Home = Join-Path $forgeHome ".forge614"
+          New-Item -ItemType Directory -Force -Path $forgeHome, $forge614Home | Out-Null
+          "HOME=$forgeHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FORGE614_HOME=$forge614Home" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Compile portable Windows test fixtures
-        shell: pwsh
         run: |
           Get-ChildItem test/fixtures/*.js | ForEach-Object {
             bun build --compile --target=bun-windows-x64 $_.FullName --outfile "$($_.FullName).exe"
             if ($LASTEXITCODE -ne 0) { throw "Could not compile fixture $($_.Name)" }
           }
       - name: Build Windows installer end-to-end assets
-        shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/windows-e2e | Out-Null
           bun build ./src/main.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-windows-x64.exe
@@ -79,7 +73,6 @@ jobs:
           bun build ./test/fixtures/fake-workers-1.1.1.ts --compile --target=bun-windows-x64 --outfile dist/windows-e2e/forge614-workers-1.1.1.exe
           if ($LASTEXITCODE -ne 0) { throw "Could not build target Workers" }
       - name: Install the pinned Forge614 Engines binary
-        shell: pwsh
         run: |
           $name = "forge614-engines-1.17.0-windows-x64.tar.gz"
           $base = "https://github.com/jotredev/forge614-engines/releases/download/v1.17.0"

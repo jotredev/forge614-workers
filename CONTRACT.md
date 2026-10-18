@@ -44,6 +44,13 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 | `forge614-workers uninstall [--json]` | Confirma en terminal interactiva; nunca borra Engines | Informa `removed` solo tras comprobar el borrado | `0`, `1`, `2`, cancelar `130` (`src/uninstall.ts:1-90`) |
 | `forge614-workers uninstall --self [--json]` | No retira integraciones propias | `integrationsRemoved: true` en JSON | `0` (`src/uninstall.ts:45-50`) |
 
+## Comandos de desarrollo y publicación
+
+- `bun run verify`: typecheck, pruebas y comprobación de la ficha.
+- `bun run build:target`: compila el destino indicado por `FORGE614_TARGET`.
+- `bun run smoke:target`: ejecuta `--version` sobre el binario compilado para ese destino.
+- `bun run release:publish`: publica los diez assets preparados en el release de GitHub.
+
 ## Códigos de salida
 
 | Código | Significado |
