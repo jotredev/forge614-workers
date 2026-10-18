@@ -43,6 +43,10 @@ Workers ejecuta en secuencia un lote JSON de tareas no interactivas, resuelve ca
 | `forge614-workers update [--version X.Y.Z] [--json]` | Etiqueta opcional; la última release si se omite | Versión instalada real; JSON opcional; errores JSON por stderr | `0`, `1`, `2` (`src/updater.ts:1-60`) |
 | `forge614-workers uninstall [--json]` | Confirma en terminal interactiva; nunca borra Engines | Informa `removed` solo tras comprobar el borrado | `0`, `1`, `2`, cancelar `130` (`src/uninstall.ts:1-90`) |
 | `forge614-workers uninstall --self [--json]` | No retira integraciones propias | `integrationsRemoved: true` en JSON | `0` (`src/uninstall.ts:45-50`) |
+| `bun run verify` | Ejecuta las comprobaciones locales | Resultado de typecheck, pruebas y ficha | `0` si pasan |
+| `bun run build:target` | Usa `FORGE614_TARGET` | Binario para macOS, Linux o Windows | `0` si compila |
+| `bun run smoke:target` | Usa `FORGE614_TARGET` | Comprueba `--version` del binario | `0` si responde |
+| `bun run release:publish` | Publica assets preparados | Release con los diez archivos | `0` si publica |
 
 ## Comandos de desarrollo y publicación
 
