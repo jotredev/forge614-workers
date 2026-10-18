@@ -8,6 +8,7 @@
 import { runCli } from "./cli";
 import pkg from "../package.json";
 import { runUpdateCommand } from "./updater";
+import { runUninstallCommand } from "./uninstall";
 
 /** Ayuda corta que imprime `--help`: qué es Workers y cómo se maneja. */
 const HELP = `forge614-workers ${pkg.version}
@@ -24,8 +25,9 @@ guarantee the lock).
 
 Usage:
   forge614-workers < batch.json
-  forge614-workers update      Download the installer of the latest release and run it with --force.
-  forge614-workers --version   Print the version and exit (also -v).
+  forge614-workers update [--version X.Y.Z] [--json]  Update Workers through the verified installer.
+  forge614-workers uninstall [--json] [--self]       Remove Workers from FORGE614_HOME.
+  forge614-workers --version [--json]                Print the version and exit (also -v).
   forge614-workers --help      Print this help and exit (also -h).
 `;
 
@@ -37,9 +39,18 @@ Usage:
  * @param args Argumentos del programa, sin el ejecutable ni el script; solo se mira el primero.
  * @returns El texto de la versión (`forge614-workers <versión>` con salto de línea) o la ayuda completa; `undefined` si el primer argumento es otro o no hay.
  */
-function infoFor(args: string[]): string | undefined {
-  if (args[0] === "--version" || args[0] === "-v") return `forge614-workers ${pkg.version}\n`;
-  if (args[0] === "--help" || args[0] === "-h") return HELP;
+function infoFor(args: string[]): { stdout?: string; stderr?: string; exitCode: number } | undefined {
+  if (args[0] === "--version" || args[0] === "-v") {
+    if (args.length === 1) return { stdout: `forge614-workers ${pkg.version}\n`, exitCode: 0 };
+    if (args.length === 2 && args[1] === "--json") {
+      return { stdout: `${JSON.stringify({ schemaVersion: 1, name: "forge614-workers", version: pkg.version })}\n`, exitCode: 0 };
+    }
+    return {
+      stderr: `${JSON.stringify({ schemaVersion: 1, code: "INVALID_ARGUMENTS", error: "--version accepts only the optional --json flag." })}\n`,
+      exitCode: 2,
+    };
+  }
+  if (args[0] === "--help" || args[0] === "-h") return { stdout: HELP, exitCode: 0 };
   return undefined;
 }
 
@@ -57,8 +68,9 @@ const args = Bun.argv.slice(2);
 // Versión y ayuda se contestan primero y terminan el proceso con código 0, sin leer stdin.
 const info = infoFor(args);
 if (info !== undefined) {
-  process.stdout.write(info);
-  process.exit(0);
+  if (info.stdout !== undefined) process.stdout.write(info.stdout);
+  if (info.stderr !== undefined) process.stderr.write(info.stderr);
+  process.exit(info.exitCode);
 }
 
 // Como --version, `update` se contesta antes de tocar stdin: nunca espera a un lote.
@@ -68,6 +80,12 @@ if (args[0] === "update") {
     writeLine: (line) => console.log(line),
     writeError: (line) => console.error(line),
   });
+  process.exit(exitCode);
+}
+
+// `uninstall` también se contesta antes de leer stdin; el instalador común llama `uninstall --self`.
+if (args[0] === "uninstall") {
+  const exitCode = await runUninstallCommand(args.slice(1));
   process.exit(exitCode);
 }
 

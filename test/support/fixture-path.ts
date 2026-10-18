@@ -11,5 +11,11 @@ import { join } from "node:path";
  * @returns La ruta absoluta de ese archivo.
  */
 export function fixturePath(name: string): string {
+  const source = fixtureScriptPath(name);
+  return process.platform === "win32" && source.endsWith(".js") ? `${source.slice(0, -3)}.exe` : source;
+}
+
+/** Devuelve la ruta fuente del fixture JavaScript para pasarlo al runtime en pruebas de procesos. */
+export function fixtureScriptPath(name: string): string {
   return join(import.meta.dir, "..", "fixtures", name);
 }
