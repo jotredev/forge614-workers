@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
+import { runUninstallCommand } from "./uninstall";
 import { cleanupStaleWindowsLaunchers, sameWindowsPath, sanitizeInstallerDetail, uninstallInstalledWorkers, updateInstalledWorkers } from "./installer-actions";
 
 /** Publica una puerta Windows local con su manifiesto GNU para probarla sin red externa. */
@@ -141,6 +142,45 @@ describe("installer actions", () => {
       expect(removalScript).not.toContain(parked ?? "");
       expect(removalScript).toContain("Wait-Process -Id 4321 -Timeout 30");
       expect(removalScript).toContain("Start-Sleep -Milliseconds 250");
+    } finally {
+      release.server.stop(true);
+      rmSync(homes.root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps Windows uninstall successful and warns when deferred deletion cannot be scheduled", async () => {
+    const homes = fakeHomes();
+    const release = serveWindowsGatekeeper("# fake installer\n");
+    const warnings: string[] = [];
+    const output: string[] = [];
+    try {
+      const exitCode = await runUninstallCommand(["--json"], {
+        writeLine: (line) => { output.push(line); },
+        writeError: (line) => { warnings.push(line); },
+        isTerminal: () => false,
+      }, () => uninstallInstalledWorkers({
+        env: { ...homes.env, FORGE614_INSTALL_TEST_BASE_URL: release.baseUrl },
+        platform: "win32",
+        processExecPath: homes.launcher,
+        run: () => {
+          rmSync(homes.workers, { recursive: true, force: true });
+          return { exitCode: 0, stdout: "", stderr: "" };
+        },
+        scheduleDelete: () => { throw new Error("WMI unavailable"); },
+        writeWarning: (line) => { warnings.push(line); },
+      }));
+
+      expect(exitCode).toBe(0);
+      expect(output).toEqual(['{"schemaVersion":1,"result":{"removed":true}}']);
+      expect(existsSync(homes.workers)).toBe(false);
+      expect(existsSync(homes.launcher)).toBe(false);
+      const forgeHome = homes.env.FORGE614_HOME!;
+      const parked = readdirSync(forgeHome).filter((name) => /^\.forge614-workers-old-.+\.exe$/i.test(name));
+      expect(parked).toHaveLength(1);
+      expect(existsSync(join(forgeHome, parked[0]!))).toBe(true);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("FORGE614_HOME\\.forge614-workers-old-*.exe");
+      expect(warnings[0]).toContain("Get-ChildItem -LiteralPath $env:FORGE614_HOME");
     } finally {
       release.server.stop(true);
       rmSync(homes.root, { recursive: true, force: true });

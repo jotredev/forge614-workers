@@ -36,6 +36,8 @@ export interface InstallerActionOptions {
   processId?: number;
   /** Programador de borrado Windows sustituible en las pruebas. */
   scheduleDelete?: (command: string, args: string[], options: { env: Record<string, string> }) => void;
+  /** Aviso de stderr para fallos recuperables del borrado diferido de Windows. */
+  writeWarning?: (line: string) => void;
   /** Etiqueta ya resuelta para una actualización dirigida a versión. */
   versionTag?: string;
   /** Versión instalada después de que el portero termine, sustituible en las pruebas. */
@@ -298,12 +300,17 @@ async function runInstallerGate(action: InstallerAction, options: InstallerActio
         throw actionError(action === "update" ? "UPDATE_FAILED" : "UNINSTALL_FAILED", detail, env, platform);
       }
       if (action === "uninstall" && parked) {
-        if (options.scheduleDelete) {
-          const removal = windowsLauncherRemovalCommand(options.processId ?? process.pid, parked.parked);
-          options.scheduleDelete(removal.command, removal.args, {
-            env: Object.fromEntries(Object.entries({ ...process.env, ...env, FORGE614_WORKERS_PARKED: parked.parked }).filter((entry): entry is [string, string] => entry[1] !== undefined)),
-          });
-        } else scheduleWindowsLauncherRemoval(parked.parked, options.processId ?? process.pid, env);
+        try {
+          if (options.scheduleDelete) {
+            const removal = windowsLauncherRemovalCommand(options.processId ?? process.pid, parked.parked);
+            options.scheduleDelete(removal.command, removal.args, {
+              env: Object.fromEntries(Object.entries({ ...process.env, ...env, FORGE614_WORKERS_PARKED: parked.parked }).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+            });
+          } else scheduleWindowsLauncherRemoval(parked.parked, options.processId ?? process.pid, env);
+        } catch {
+          const warning = "No se pudo programar el borrado de FORGE614_HOME\\.forge614-workers-old-*.exe; elimínalo con PowerShell: Get-ChildItem -LiteralPath $env:FORGE614_HOME -Filter '.forge614-workers-old-*.exe' -File | Remove-Item -Force.";
+          try { (options.writeWarning ?? ((line) => process.stderr.write(`${line}\n`)))(warning); } catch { /* El borrado diferido es mejor esfuerzo. */ }
+        }
       } else if (action === "update" && parked) {
         if (!existsSync(parked.original)) restoreWindowsLauncher(parked);
       }

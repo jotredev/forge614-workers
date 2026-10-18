@@ -23,7 +23,7 @@ On Windows, the executable in `workers/bin/` may be in use while Atlas processes
 
 Failures are JSON on stderr with code `UNINSTALL_FAILED`; invalid arguments use `INVALID_ARGUMENTS`. `uninstall --self` is required by `install.mjs` and removes no files.
 
-On Windows, `uninstall` uses WMI to schedule removal of the parked executable after Workers exits. If `FORGE614_HOME\.forge614-workers-old-*.exe` remains, close Workers and its active processes, open PowerShell, and remove it with:
+On Windows, `uninstall` uses WMI to schedule removal of the parked executable after Workers exits. If it cannot schedule that cleanup, `uninstall` still exits with `removed: true` and prints a one-line warning with the manual command to stderr. The `.exe` remains at `FORGE614_HOME\.forge614-workers-old-*.exe`; close Workers and its active processes, open PowerShell, and remove it with:
 
 ```powershell
 Get-ChildItem -LiteralPath $env:FORGE614_HOME -Filter '.forge614-workers-old-*.exe' -File | Remove-Item -Force

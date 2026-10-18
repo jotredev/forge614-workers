@@ -33,7 +33,7 @@ try {
     Start-Sleep -Milliseconds 100
     $parked = @(Get-ChildItem -LiteralPath $forgeHome -Filter ".forge614-workers-old-*.exe" -File -ErrorAction SilentlyContinue)
   }
-  Write-Host "W2G_PERMANENT_PARKED_AFTER_45S=$($parked.Count -eq 0)"
+  Write-Host "W2G_PERMANENT_PARKED_REMOVED=$($parked.Count -eq 0)"
   if ($parked.Count -gt 0) { throw "Deferred Windows uninstall cleanup left a parked launcher after 45 seconds" }
 } finally {
   if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
