@@ -133,8 +133,14 @@ describe("installer actions", () => {
       expect(parked?.startsWith(homes.workers)).toBe(false);
       expect(existsSync(parked ?? "")).toBe(true);
       const script = Buffer.from(scheduled?.args.at(-1) ?? "", "base64").toString("utf16le");
-      expect(script).toContain("Wait-Process -Id 4321 -Timeout 30");
-      expect(script).toContain("Start-Sleep -Milliseconds 250");
+      expect(script).toContain("Invoke-CimMethod -ClassName Win32_Process -MethodName Create");
+      const removalEncoded = /-EncodedCommand ([A-Za-z0-9+/=]+)/.exec(script)?.[1] ?? "";
+      const removalScript = Buffer.from(removalEncoded, "base64").toString("utf16le");
+      const filePayload = Buffer.from(parked ?? "", "utf8").toString("base64");
+      expect(removalScript).toContain(`FromBase64String('${filePayload}')`);
+      expect(removalScript).not.toContain(parked ?? "");
+      expect(removalScript).toContain("Wait-Process -Id 4321 -Timeout 30");
+      expect(removalScript).toContain("Start-Sleep -Milliseconds 250");
     } finally {
       release.server.stop(true);
       rmSync(homes.root, { recursive: true, force: true });

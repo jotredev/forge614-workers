@@ -23,7 +23,7 @@ En Windows, el ejecutable de `workers/bin/` puede estar en uso mientras Atlas pr
 
 Los fallos se emiten como JSON en stderr con código `UNINSTALL_FAILED`; argumentos inválidos usan `INVALID_ARGUMENTS`. `uninstall --self` es la respuesta requerida por `install.mjs` y no borra archivos.
 
-En Windows, tras `uninstall`, puede quedar `FORGE614_HOME\.forge614-workers-old-*.exe` porque el proceso PowerShell diferido puede terminar junto con Workers. Cierra Workers y sus procesos activos, abre PowerShell y borra esos ejecutables aparcados con:
+En Windows, `uninstall` programa con WMI la retirada del ejecutable apartado después de que Workers termine. Si aún queda `FORGE614_HOME\.forge614-workers-old-*.exe`, cierra Workers y sus procesos activos, abre PowerShell y bórralo con:
 
 ```powershell
 Get-ChildItem -LiteralPath $env:FORGE614_HOME -Filter '.forge614-workers-old-*.exe' -File | Remove-Item -Force

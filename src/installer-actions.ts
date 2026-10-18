@@ -35,7 +35,7 @@ export interface InstallerActionOptions {
   /** PID actual, sustituible para comprobar la limpieza Windows. */
   processId?: number;
   /** Programador de borrado Windows sustituible en las pruebas. */
-  scheduleDelete?: (command: string, args: string[], options: { env: Record<string, string>; detached: true; stdio: "ignore"; windowsHide: true }) => void;
+  scheduleDelete?: (command: string, args: string[], options: { env: Record<string, string> }) => void;
   /** Etiqueta ya resuelta para una actualización dirigida a versión. */
   versionTag?: string;
   /** Versión instalada después de que el portero termine, sustituible en las pruebas. */
@@ -243,8 +243,11 @@ function restoreWindowsLauncher(parked: { original: string; parked: string } | u
 }
 
 /** Crea la orden PowerShell que borra con reintentos el .exe aparcado al terminar Workers. */
-function windowsLauncherRemovalCommand(processId: number): { command: string; args: string[] } {
-  const script = `try { Wait-Process -Id ${processId} -Timeout 30 -ErrorAction SilentlyContinue } catch {}; for ($attempt = 0; $attempt -lt 30; $attempt++) { Remove-Item -LiteralPath $env:FORGE614_WORKERS_PARKED -Force -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath $env:FORGE614_WORKERS_PARKED)) { break }; Start-Sleep -Milliseconds 250 }`;
+function windowsLauncherRemovalCommand(processId: number, file: string): { command: string; args: string[] } {
+  const filePayload = Buffer.from(file, "utf8").toString("base64");
+  const removalScript = `$file = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${filePayload}')); try { Wait-Process -Id ${processId} -Timeout 30 -ErrorAction SilentlyContinue } catch {}; for ($attempt = 0; $attempt -lt 30; $attempt++) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue; if (-not (Test-Path -LiteralPath $file)) { break }; Start-Sleep -Milliseconds 250 }`;
+  const removalEncoded = Buffer.from(removalScript, "utf16le").toString("base64");
+  const script = `$powershell = Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'; $commandLine = '"{0}" -NoProfile -ExecutionPolicy Bypass -NonInteractive -EncodedCommand ${removalEncoded}' -f $powershell; $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $commandLine }; if ($created.ReturnValue -ne 0) { exit 1 }`;
   const encoded = Buffer.from(script, "utf16le").toString("base64");
   return {
     command: "powershell.exe",
@@ -254,10 +257,11 @@ function windowsLauncherRemovalCommand(processId: number): { command: string; ar
 
 /** Programa la eliminación del .exe apartado después de que el proceso actual haya terminado. */
 function scheduleWindowsLauncherRemoval(file: string, processId: number, env: Record<string, string | undefined>): void {
-  const removal = windowsLauncherRemovalCommand(processId);
+  const removal = windowsLauncherRemovalCommand(processId, file);
   const childEnv = Object.fromEntries(Object.entries({ ...process.env, ...env, FORGE614_WORKERS_PARKED: file }).filter((entry): entry is [string, string] => entry[1] !== undefined));
-  const child = spawn(removal.command, removal.args, { env: childEnv, detached: true, stdio: "ignore", windowsHide: true });
-  child.unref();
+  const result = spawnSync(removal.command, removal.args, { env: childEnv, stdio: "ignore", windowsHide: true, timeout: 10_000 });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error("Could not schedule deferred Windows launcher removal.");
 }
 
 /** Ejecuta una operación del portero con la etiqueta ya resuelta y SHA256SUMS validado. */
@@ -295,12 +299,9 @@ async function runInstallerGate(action: InstallerAction, options: InstallerActio
       }
       if (action === "uninstall" && parked) {
         if (options.scheduleDelete) {
-          const removal = windowsLauncherRemovalCommand(options.processId ?? process.pid);
+          const removal = windowsLauncherRemovalCommand(options.processId ?? process.pid, parked.parked);
           options.scheduleDelete(removal.command, removal.args, {
             env: Object.fromEntries(Object.entries({ ...process.env, ...env, FORGE614_WORKERS_PARKED: parked.parked }).filter((entry): entry is [string, string] => entry[1] !== undefined)),
-            detached: true,
-            stdio: "ignore",
-            windowsHide: true,
           });
         } else scheduleWindowsLauncherRemoval(parked.parked, options.processId ?? process.pid, env);
       } else if (action === "update" && parked) {
