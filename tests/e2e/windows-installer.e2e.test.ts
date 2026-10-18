@@ -80,6 +80,12 @@ async function installWorkers(context: ReturnType<typeof createContext>): Promis
   expect(existsSync(context.launcher)).toBe(true);
 }
 
+/** Sitúa el binario real en su ruta de ejecución instalada para aislar los tests de update y uninstall. */
+function prepareInstalledLauncher(context: ReturnType<typeof createContext>): void {
+  mkdirSync(join(context.workers, "bin"), { recursive: true });
+  copyFileSync(join(DIST, "forge614-workers-windows-x64.exe"), context.launcher);
+}
+
 describe("Workers Windows installer end-to-end", () => {
   test.skipIf(process.platform !== "win32")("installs through install.ps1 and reports the installed version", async () => {
     const context = createContext();
@@ -98,7 +104,7 @@ describe("Workers Windows installer end-to-end", () => {
   test.skipIf(process.platform !== "win32")("updates from the active bin executable and removes its parked copy", async () => {
     const context = createContext();
     try {
-      await installWorkers(context);
+      prepareInstalledLauncher(context);
       const update = await run([context.launcher, "update", "--version", "v1.1.1", "--json"], context.env, context.root);
       expect(update.status).toBe(0);
       expect(JSON.parse(update.stdout.trim())).toEqual({ schemaVersion: 1, updated: true, previousVersion: "1.1.0", installedVersion: "1.1.1" });
@@ -114,7 +120,7 @@ describe("Workers Windows installer end-to-end", () => {
   test.skipIf(process.platform !== "win32")("refuses an in-tree uninstall, then removes Workers from outside", async () => {
     const context = createContext();
     try {
-      await installWorkers(context);
+      prepareInstalledLauncher(context);
       const inside = await run([context.launcher, "uninstall", "--json"], context.env, context.workers);
       expect(inside.status).toBe(1);
       expect(JSON.parse(inside.stderr.trim())).toMatchObject({ schemaVersion: 1, code: "UNINSTALL_FAILED" });
