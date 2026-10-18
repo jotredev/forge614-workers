@@ -99,6 +99,14 @@ function prepareInstalledLauncher(context: ReturnType<typeof createContext>): vo
   copyFileSync(join(DIST, "forge614-workers-windows-x64.exe"), context.launcher);
 }
 
+/** Da tiempo al proceso de PowerShell diferido para soltar el hogar temporal antes de borrarlo. */
+async function waitForParkedUninstallProcess(context: ReturnType<typeof createContext>): Promise<void> {
+  const deadline = Date.now() + 40_000;
+  const parkedFiles = () => readdirSync(context.forgeHome).filter((name) => /^\.forge614-workers-old-.+\.exe$/i.test(name));
+  while (parkedFiles().length > 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+  console.log(`W2F_PENDING_PARKED_REMAINS=${parkedFiles().length ? "yes" : "no"}`);
+}
+
 describe("Workers Windows installer end-to-end", () => {
   // Pendiente: Windows CI confirma que PowerShell se inicia pero no sobrevive a Workers; el borrado manual está documentado en docs/11-troubleshooting.md.
   test.todo("removes the parked Windows launcher after uninstall exits");
@@ -182,6 +190,7 @@ describe("Workers Windows installer end-to-end", () => {
       expect(existsSync(context.workers)).toBe(false);
       expect(existsSync(context.enginesPath)).toBe(true);
     } finally {
+      await waitForParkedUninstallProcess(context);
       context.release.server.stop(true);
       rmSync(context.root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
