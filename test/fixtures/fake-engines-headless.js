@@ -2,7 +2,7 @@
 // Simula `forge614-engines headless` para las dos pruebas de punta a punta de `test/e2e.test.ts` (éxito y cuota): siempre responde
 // que el comando es el valor de `--executable`, sin argumentos y con `stdin: true`, así que el prompt nunca viaja en los argumentos.
 // Cualquier otro subcomando (por ejemplo `capabilities`) devuelve `UNKNOWN_COMMAND` y sale con 1; así la prueba no depende de tener Engines instalado.
-const args = Bun.argv.slice(2);
+const args = Bun.argv.slice(Bun.argv.indexOf("headless"));
 // Devuelve el valor que sigue a la bandera dada en los argumentos, o `undefined` si la bandera no está.
 function flag(name) {
   const i = args.indexOf(name);
