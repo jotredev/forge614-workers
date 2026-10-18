@@ -3,13 +3,15 @@
 ## Producto y contratos
 
 - `README.md` y `README.en.md`: entrada del proyecto (qué es, instalación, entrada/salida y documentación) en español e inglés.
-- `package.json`: versión `1.0.2`, scripts de test/typecheck/build y dependencias.
+- `package.json`: versión `1.1.0`, scripts de verificación, compilación y publicación y dependencias.
 - `tsconfig.json`: tipado estricto de `src`, `test` y `scripts`.
 - `CHANGELOG.md`: historial de versiones (una entrada `## <versión>` por release).
 - `LICENSE` y `SECURITY.md`: licencia y política de seguridad.
-- `scripts/install.sh`: instalador verificado (sha256, Engines compatible, carpeta por versión y enlace activo).
+- `forge614.node.json`: identidad del nodo, huella del estándar y contrato de instalación.
+- `install.sh` e `install.ps1`: porteros Unix y Windows que cargan la plantilla compartida `install.mjs`.
+- `install.mjs` y `scripts/prepare-release-assets.mjs`: plantillas comunes copiadas sin cambios.
+- `scripts/build-target.mjs`, `scripts/smoke-target.mjs` y `scripts/release-publish.mjs`: herramientas de compilación, humo y publicación.
 - `.github/workflows/verify.yml` y `.github/workflows/release.yml`: verificación en cada push y PR, y publicación de binarios.
-- `FORGE614_ECOSYSTEM_CONTRACT.md`: límites y contratos entre productos.
 - `.forge614/project.json`: identidad portátil del proyecto en Engram (id del proyecto y del grupo `forge614`).
 - `docs/superpowers/specs/2026-09-20-forge614-workers-design.md`: especificación aprobada.
 - `docs/superpowers/plans/2026-09-20-forge614-workers-implementation.md`: plan de implementación.
@@ -26,12 +28,14 @@
 - `src/adapters/registry.ts`: registro de adapters.
 - `src/adapters/_template.ts`: plantilla de extensión.
 - `src/cli.ts`: frontera de entrada/salida y fatal errors.
-- `src/updater.ts`: comando `update` (descarga del instalador de la última release y ejecución con `--force`, con descarga y proceso inyectables).
-- `src/main.ts`: punto de entrada del binario; atiende `--version`/`--help`/`update` antes de leer stdin y toma la versión de `package.json`.
+- `src/installer-actions.ts`: descarga y verifica el portero; actualiza, desinstala y gestiona la copia ejecutable de Windows.
+- `src/updater.ts`: analizador de `update`, salida de texto/JSON y ruta del lanzador instalado.
+- `src/uninstall.ts`: confirmación, cancelación y salida de `uninstall`/`uninstall --self`.
+- `src/main.ts`: punto de entrada del binario; atiende `--version`/`--help`/`update`/`uninstall` antes de leer stdin y toma la versión de `package.json`.
 
 ## Tests y fixtures
 
-Los tests `src/**/*.test.ts` cubren tipos, adapters, registro, Engines client, runner, process runner y CLI. `src/updater.test.ts` cubre `update` con dobles. `scripts/__tests__/install.sh.test.ts` prueba el instalador con un HOME temporal. `test/versions.test.ts` exige versiones alineadas. `test/e2e.test.ts` conecta el flujo completo con dobles y comprueba `--version`, `--help` y `update` (con `test/support/fake-update-preload.ts`). `test/fixtures/` contiene procesos que hacen echo de stdin, producen cuota, exceden salida, ignoran SIGTERM, imprimen cwd/env y simulan Engines.
+Los tests `src/**/*.test.ts` cubren tipos, adapters, registro, Engines client, runner, proceso, instalación, actualización, desinstalación y CLI. `test/versions.test.ts` exige versiones alineadas. `test/e2e.test.ts` cubre CLI y lotes; `tests/e2e/` instala desde una publicación local, migra 1.0.2, actualiza y desinstala. `tests/e2e/windows-installer.e2e.test.ts` cubre Windows en CI. `test/fixtures/` contiene procesos falsos para tareas y Engines.
 
 ## Documentación de mantenimiento
 

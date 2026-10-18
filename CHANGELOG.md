@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- **Instalador común:** se adoptan los porteros `install.sh`/`install.ps1`, `install.mjs` y el contrato `forge614.node.json` de Standard 1.2.1.
+- **Windows x64:** se agrega el binario nativo y la gestión segura del ejecutable durante `update` y `uninstall`.
+- **CLI:** `--version --json`, actualización dirigida y desinstalación con confirmación, cancelación y `--self`.
+- **Pruebas y documentación:** se cubren instalación, migración desde 1.0.2, actualización y retirada con releases locales; se documentan macOS, Linux y Windows.
+
 ## 1.0.2
 
 - **Respuestas de Engines:** las respuestas `headless` mal formadas ahora fallan con `ENGINES_RESPONSE_INVALID`; se validan los campos que Workers consume.
